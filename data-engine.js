@@ -19,22 +19,22 @@
   const SEED_PATIENTS = [
     { id: 'P001', name: 'Margaret Okafor', age: 68, dx: 'HTN Stage 2, CKD Stage 3',
       conditions: ['HTN', 'CKD'], phase: 30, riskBase: 62, deteriorating: true,
-      vitals: { sbp: 172, dbp: 98, hr: 88, spo2: 97, weight: 162, glucose: null } },
+      vitals: { sbp: 172, dbp: 98, hr: 88, spo2: 97, weight: 162, glucose: null, rr: 18, temp: 37.0, consciousness: 'alert', supplementalO2: false } },
     { id: 'P002', name: 'Robert Chen', age: 74, dx: 'CHF NYHA III, T2DM, HFrEF EF 40%',
       conditions: ['CHF', 'DM'], phase: 30, riskBase: 76, deteriorating: true,
-      vitals: { sbp: 148, dbp: 88, hr: 96, spo2: 93, weight: 203, glucose: 218 } },
+      vitals: { sbp: 148, dbp: 88, hr: 96, spo2: 93, weight: 203, glucose: 218, rr: 20, temp: 37.1, consciousness: 'alert', supplementalO2: false } },
     { id: 'P003', name: 'Diane Morales', age: 61, dx: 'COPD GOLD II, Declining SpO2',
       conditions: ['COPD'], phase: 60, riskBase: 58, deteriorating: true,
-      vitals: { sbp: 128, dbp: 80, hr: 82, spo2: 89, weight: 154, glucose: null } },
+      vitals: { sbp: 128, dbp: 80, hr: 82, spo2: 89, weight: 154, glucose: null, rr: 22, temp: 37.0, consciousness: 'alert', supplementalO2: false } },
     { id: 'P004', name: 'James Okafor', age: 71, dx: 'T2DM, HTN Stage 1, Stable',
       conditions: ['DM', 'HTN'], phase: 60, riskBase: 30, deteriorating: false,
-      vitals: { sbp: 136, dbp: 84, hr: 74, spo2: 98, weight: 188, glucose: 142 } },
+      vitals: { sbp: 136, dbp: 84, hr: 74, spo2: 98, weight: 188, glucose: 142, rr: 16, temp: 36.8, consciousness: 'alert', supplementalO2: false } },
     { id: 'P005', name: 'Patricia Walsh', age: 79, dx: 'CHF NYHA I, Stable',
       conditions: ['CHF'], phase: 60, riskBase: 36, deteriorating: false,
-      vitals: { sbp: 132, dbp: 78, hr: 74, spo2: 96, weight: 158, glucose: null } },
+      vitals: { sbp: 132, dbp: 78, hr: 74, spo2: 96, weight: 158, glucose: null, rr: 16, temp: 36.9, consciousness: 'alert', supplementalO2: false } },
     { id: 'P006', name: 'Marcus Rivera', age: 52, dx: 'HTN Stage 2, Non-Adherent',
       conditions: ['HTN'], phase: 30, riskBase: 52, deteriorating: true,
-      vitals: { sbp: 158, dbp: 96, hr: 88, spo2: 98, weight: 195, glucose: null } },
+      vitals: { sbp: 158, dbp: 96, hr: 88, spo2: 98, weight: 195, glucose: null, rr: 18, temp: 37.0, consciousness: 'alert', supplementalO2: false } },
   ];
 
   function clamp(v, min, max) { return Math.max(min, Math.min(max, v)); }
@@ -82,6 +82,7 @@
       try {
         localStorage.setItem('sv_pred_' + id, JSON.stringify({
           riskScore: p.riskScore, er48h: p.er48h, hosp30d: p.hosp30d, det24h: p.det24h,
+          newsScore: p.newsScore, newsBand: p.newsBand,
           summary: p.summary, top_concern: p.topConcern, action: p.action,
           ts: state.updatedAt, source: p.source
         }));
@@ -98,31 +99,106 @@
     if (v.spo2 != null) v.spo2 = Math.round(clamp(jitter(v.spo2 - (p.deteriorating ? 0.15 : 0), 1), 82, 100));
     if (v.weight != null) v.weight = round1(clamp(jitter(v.weight + (p.deteriorating ? 0.15 : -0.05), 0.6), v.weight - 15, v.weight + 15));
     if (v.glucose != null) v.glucose = Math.round(clamp(jitter(v.glucose, 12), 60, 400));
+    if (v.rr != null) v.rr = Math.round(clamp(jitter(v.rr + drift * 0.25, 1.5), 10, 34));
+    if (v.temp != null) v.temp = round1(clamp(jitter(v.temp, 0.15), 35.0, 39.5));
+    // Auto-flag supplemental oxygen once SpO2 is persistently low — mirrors real
+    // RPM/telehealth practice of prescribing home O2 below ~88-90%.
+    if (v.spo2 != null) v.supplementalO2 = v.spo2 < 88;
     p.history.push(Object.assign({ ts: Date.now() }, v));
     if (p.history.length > 30) p.history.shift();
   }
 
+  // ── NEWS2 (National Early Warning Score 2) ──
+  // Royal College of Physicians, 2017 update; endorsed by NHS England for
+  // standardised detection of acute deterioration from routine vital signs.
+  // This is the validated "how acutely unwell right now" core of the risk
+  // engine — condition-specific modifiers (CHF weight gain, DM glucose,
+  // adherence) are layered on top of it in baselineScore(), not folded in.
+  function computeNEWS2(v) {
+    const b = {};
+    let total = 0;
+    function add(key, pts) { b[key] = pts; total += pts; }
+
+    if (v.rr == null) add('rr', 0);
+    else if (v.rr <= 8) add('rr', 3);
+    else if (v.rr <= 11) add('rr', 1);
+    else if (v.rr <= 20) add('rr', 0);
+    else if (v.rr <= 24) add('rr', 2);
+    else add('rr', 3);
+
+    if (v.spo2 == null) add('spo2', 0);
+    else if (v.spo2 <= 91) add('spo2', 3);
+    else if (v.spo2 <= 93) add('spo2', 2);
+    else if (v.spo2 <= 95) add('spo2', 1);
+    else add('spo2', 0);
+    add('o2', v.supplementalO2 ? 2 : 0);
+
+    if (v.sbp == null) add('sbp', 0);
+    else if (v.sbp <= 90) add('sbp', 3);
+    else if (v.sbp <= 100) add('sbp', 2);
+    else if (v.sbp <= 110) add('sbp', 1);
+    else if (v.sbp <= 219) add('sbp', 0);
+    else add('sbp', 3);
+
+    if (v.hr == null) add('hr', 0);
+    else if (v.hr <= 40) add('hr', 3);
+    else if (v.hr <= 50) add('hr', 1);
+    else if (v.hr <= 90) add('hr', 0);
+    else if (v.hr <= 110) add('hr', 1);
+    else if (v.hr <= 130) add('hr', 2);
+    else add('hr', 3);
+
+    add('consciousness', v.consciousness === 'alert' ? 0 : 3);
+
+    if (v.temp == null) add('temp', 0);
+    else if (v.temp <= 35.0) add('temp', 3);
+    else if (v.temp <= 36.0) add('temp', 1);
+    else if (v.temp <= 38.0) add('temp', 0);
+    else if (v.temp <= 39.0) add('temp', 1);
+    else add('temp', 2);
+
+    const band = total >= 7 ? 'high' : (total >= 5 || Math.max(b.rr, b.spo2, b.sbp, b.hr, b.consciousness, b.temp) >= 3) ? 'medium' : 'low';
+    return { total: total, breakdown: b, band: band };
+  }
+
   // Baseline clinical scoring — always runs so numbers never sit empty.
-  // A portal (Command / Predict) can override with richer numbers via setDerived().
+  // Architecture: NEWS2 (validated, vital-sign-only) provides the acuity
+  // core; condition-specific modifiers — sourced to their own guideline
+  // bodies (ADA for glucose, standard CHF self-monitoring guidance for
+  // rapid weight gain, adherence) — are added on top, not blended in.
+  // A portal (Command / Predict) can override with richer numbers via
+  // setDerived(), but newsScore/newsBand always stay engine-computed.
   function baselineScore(p) {
     const v = p.vitals;
-    let score = p.riskBase;
-    if (v.sbp >= 180) score += 20; else if (v.sbp >= 160) score += 12; else if (v.sbp >= 140) score += 6;
-    if (v.spo2 != null && v.spo2 < 90) score += 22; else if (v.spo2 != null && v.spo2 < 94) score += 12;
-    if (v.glucose != null && v.glucose > 300) score += 18; else if (v.glucose != null && v.glucose > 180) score += 8;
-    if (p.adherence === 'no') score += 14; else if (p.adherence === 'partial') score += 7;
-    score = clamp(Math.round(score), 5, 98);
+    const news = computeNEWS2(v);
+    // NEWS2 max realistic score ~17-20; scale so the RCP's own escalation
+    // bands (0-4 low / 5-6 or any single 3 = medium / >=7 high) roughly
+    // line up with SyncVitals' existing 0-40 / 40-60 / 60+ risk tiers.
+    let score = clamp(news.total * 7, 0, 75);
 
-    const er = clamp(Math.round(score * 0.45 + (v.spo2 != null && v.spo2 < 92 ? 20 : 0) + (v.sbp >= 180 ? 18 : 0)), 2, 95);
+    // Condition-specific modifiers (guideline-sourced, layered on top of NEWS2)
+    if (v.glucose != null && p.conditions.includes('DM')) {
+      if (v.glucose > 300) score += 18; else if (v.glucose > 180) score += 8; // ADA thresholds
+    }
+    if (p.conditions.includes('CHF') && v.weight != null) {
+      // Rapid weight gain — standard CHF self-monitoring guidance (AHA)
+      score += p.deteriorating ? 10 : 0;
+    }
+    if (p.adherence === 'no') score += 14; else if (p.adherence === 'partial') score += 7;
+
+    score = clamp(Math.round(score), 5, 98);
+    const er = clamp(Math.round(score * 0.45 + (v.spo2 != null && v.spo2 < 92 ? 15 : 0)), 2, 95);
     const hosp = clamp(Math.round(score * 0.6 + er * 0.25 + Math.max(0, (p.age - 65) * 0.4)), 3, 95);
     const det24h = clamp(Math.round(er * 0.55 + score * 0.3), 0, 95);
 
+    p.newsScore = news.total; p.newsBand = news.band; p.newsBreakdown = news.breakdown;
     p.riskScore = score; p.er48h = er; p.hosp30d = hosp; p.det24h = det24h;
-    p.topConcern = (v.spo2 != null && v.spo2 < 90) ? ('SpO\u2082 critical low (' + v.spo2 + '%)')
+    p.topConcern = news.band === 'high' ? ('NEWS2 ' + news.total + ' (high) \u2014 multi-system deterioration')
+      : (v.spo2 != null && v.spo2 < 90) ? ('SpO\u2082 critical low (' + v.spo2 + '%)')
       : v.sbp >= 180 ? ('Hypertensive urgency (SBP ' + v.sbp + ')')
       : p.deteriorating ? 'Trending up over recent readings' : 'Stable';
-    p.summary = p.name.split(' ')[0] + ' (' + p.dx + ') \u2014 risk ' + score + '/100, ER 48h ' + er + '%, admit 30d ' + hosp + '%.';
-    p.action = score >= 70 ? 'Contact physician now' : score >= 45 ? 'Notify physician within 4 hours' : 'Continue monitoring per care plan';
+    p.summary = p.name.split(' ')[0] + ' (' + p.dx + ') \u2014 NEWS2 ' + news.total + ' (' + news.band + '), composite risk ' + score + '/100, ER 48h ' + er + '%, admit 30d ' + hosp + '%.';
+    p.action = news.band === 'high' || score >= 70 ? 'Contact physician now' : news.band === 'medium' || score >= 45 ? 'Notify physician within 4 hours' : 'Continue monitoring per care plan';
     p.source = 'engine';
   }
 
@@ -180,6 +256,7 @@
     loadState: loadState,
     tick: tick,
     setDerived: setDerived,
+    computeNEWS2: computeNEWS2,
     start: start,
     stop: stop,
     STORAGE_KEY: STORAGE_KEY,

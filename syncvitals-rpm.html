@@ -6688,6 +6688,11 @@ function renderPredScores(p) {
             (scores.hosp30d != null ? scores.hosp30d + '<span style="font-size:11px">%</span>' : '—') +
           '</div></div>' +
       '</div>' +
+      (scores.newsScore != null ? '<div style="display:flex;align-items:center;gap:6px;margin-bottom:8px">' +
+        '<span style="background:' + (scores.newsBand==='high'?'rgba(226,75,74,0.35)':scores.newsBand==='medium'?'rgba(239,159,39,0.3)':'rgba(29,158,117,0.3)') + ';' +
+        'border-radius:6px;padding:2px 8px;font-size:11px;font-weight:700">NEWS2 ' + scores.newsScore + ' (' + scores.newsBand + ')</span>' +
+        '<span style="font-size:9px;opacity:0.55">Royal College of Physicians early warning score</span>' +
+      '</div>' : '') +
       (scores.summary ? '<div style="font-size:11px;opacity:0.85;line-height:1.5;margin-bottom:4px">' + scores.summary + '</div>' : '') +
       (scores.top_concern ? '<div style="font-size:11px;font-weight:700;color:#ffcc88">⚡ ' + scores.top_concern + '</div>' : '') +
       (scores.action ? '<div style="font-size:11px;opacity:0.75;margin-top:3px">→ ' + scores.action + '</div>' : '') +

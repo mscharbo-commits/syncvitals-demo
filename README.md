@@ -11,6 +11,14 @@ Four standalone demo portals wired to one shared, evolving dataset instead of ea
 - `syncvitals-rpm.html` — Nurse Portal / RPM (patient registry, trend charts, care plans, escalation)
 - `sv-patient-nutrition.html` — Patient Nutrition Portal (food logging, condition-specific guidance)
 
+## Risk scoring architecture
+The composite risk score is no longer an unnamed points system. It's built in two layers:
+
+1. **NEWS2 (National Early Warning Score 2)** — the acuity core, computed identically by every portal via `SVEngine.computeNEWS2()`. NEWS2 is published by the Royal College of Physicians (UK, 2017 update) and endorsed by NHS England as the standard tool for detecting deterioration from routine vital signs (respiratory rate, SpO2, systolic BP, pulse, consciousness, temperature, supplemental O2 use). It's been validated across many peer-reviewed studies and care settings.
+2. **Condition-specific modifiers**, layered on top and individually sourced: glucose thresholds from ADA Standards of Care, CHF rapid-weight-gain thresholds from standard AHA self-monitoring guidance, plus a medication-adherence adjustment.
+
+This split matters for credibility: the NEWS2 layer is a real, citable, externally validated instrument; the condition-specific modifiers are guideline-sourced but not independently validated as a combined predictive model. Command Dashboard and Predict AI can enrich a patient's `riskScore`/`er48h`/`hosp30d`/narrative when open, but `newsScore`/`newsBand` always stay engine-computed so the core acuity signal is consistent everywhere.
+
 ## AI nutrition plan generation
 The Nurse Portal's "AI Build" nutrition planner (`nutrAIBuild()` in `syncvitals-rpm.html`) calls `/api/nutrition-plan`, a Vercel serverless function that holds the real Anthropic API key and forwards the request. This requires an **`ANTHROPIC_API_KEY`** environment variable set on the Vercel project (Project Settings → Environment Variables). Without it, the function returns an error and the UI automatically falls back to a rule-based offline plan — so the feature degrades gracefully either way, it just won't be true AI-generated content until the key is set.
 

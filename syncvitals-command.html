@@ -410,30 +410,31 @@ PATIENTS.forEach(p => {
   };
 });
 
-// ── RISK SCORING (lightweight — no DISEASES dependency) ──
+// ── RISK SCORING ──
+// Core acuity layer is NEWS2 (National Early Warning Score 2 — Royal
+// College of Physicians, endorsed by NHS England), computed by the shared
+// data engine so every portal uses the identical formula. Condition-specific
+// modifiers below are layered on top and individually guideline-sourced
+// (ADA for glucose, standard CHF self-monitoring guidance for rapid weight
+// gain) rather than folded into an unnamed points system.
 function scorePatient(p) {
   const s = engineState[p.id];
   const v = p.vitals;
-  let score = p.riskBase;
   const anoms = [];
 
-  // BP
-  if (p.conditions.includes('HTN') || p.conditions.includes('CHF')) {
-    if (v.sbp >= 180) { score += 20; anoms.push({ sev:'crit', msg:'SBP ' + v.sbp + ' — hypertensive crisis' }); }
-    else if (v.sbp >= 160) { score += 12; anoms.push({ sev:'warn', msg:'SBP ' + v.sbp + ' — Stage 2' }); }
-    else if (v.sbp >= 140) { score += 6; }
-  }
-  // SpO2
-  if (v.spo2 !== null) {
-    if (v.spo2 < 90) { score += 22; anoms.push({ sev:'crit', msg:'SpO₂ ' + v.spo2 + '% — hypoxia' }); }
-    else if (v.spo2 < 94) { score += 12; anoms.push({ sev:'warn', msg:'SpO₂ ' + v.spo2 + '% — low' }); }
-  }
-  // Glucose
+  const news = window.SVEngine ? window.SVEngine.computeNEWS2(v) : { total: 0, band: 'low' };
+  let score = Math.min(75, news.total * 7);
+  if (news.band === 'high') anoms.push({ sev: 'crit', msg: 'NEWS2 ' + news.total + ' — high acuity (RCP escalation threshold)' });
+  else if (news.band === 'medium') anoms.push({ sev: 'warn', msg: 'NEWS2 ' + news.total + ' — medium acuity' });
+  if (v.sbp >= 180) anoms.push({ sev: 'crit', msg: 'SBP ' + v.sbp + ' — hypertensive crisis' });
+  if (v.spo2 != null && v.spo2 < 90) anoms.push({ sev: 'crit', msg: 'SpO₂ ' + v.spo2 + '% — hypoxia' });
+
+  // Glucose — ADA Standards of Care thresholds
   if (v.glucose !== null && p.conditions.includes('DM')) {
     if (v.glucose > 300) { score += 18; anoms.push({ sev:'crit', msg:'Glucose ' + v.glucose + ' — DKA risk' }); }
     else if (v.glucose > 180) { score += 8; anoms.push({ sev:'warn', msg:'Glucose ' + v.glucose + ' — above target' }); }
   }
-  // CHF weight
+  // CHF weight — standard CHF self-monitoring guidance (AHA)
   if (p.conditions.includes('CHF') && v.weight) {
     const base = p.id === 'P002' ? 183 : p.id === 'P005' ? 155 : v.weight;
     const gain = v.weight - base;
@@ -443,12 +444,11 @@ function scorePatient(p) {
   // Adherence
   if (p.adherence === 'no') score += 14;
   else if (p.adherence === 'partial') score += 7;
-  // Drift
-  if (p.deteriorating) score += Math.sin(cycle * 0.3) * 4;
 
   score = Math.max(0, Math.min(99, Math.round(score)));
   s.riskScore = score;
   s.riskLevel = score >= 60 ? 'crit' : score >= 40 ? 'warn' : 'ok';
+  s.newsScore = news.total; s.newsBand = news.band;
   s.anomalies = anoms;
 
   // Alert on high score
@@ -506,6 +506,7 @@ function runAI(p) {
   if (window.SVEngine) {
     window.SVEngine.setDerived(p.id, {
       riskScore: rs, er48h: er, hosp30d: hosp, det24h: det,
+      newsScore: s.newsScore, newsBand: s.newsBand,
       summary, topConcern: top_concern, action, source: 'command'
     });
   } else {
@@ -565,6 +566,7 @@ async function runCycle() {
     if (window.SVEngine) {
       window.SVEngine.setDerived(p.id, {
         riskScore: rs, er48h: er, hosp30d: hosp,
+        newsScore: s.newsScore, newsBand: s.newsBand,
         source: 'command'
       });
     } else {
