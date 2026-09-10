@@ -43,11 +43,13 @@ module.exports = async function handler(req, res) {
 
     const data = await upstream.json();
     if (!upstream.ok) {
+      console.error('Anthropic API error', upstream.status, JSON.stringify(data));
       res.status(upstream.status).json({ error: (data && data.error && data.error.message) || 'Upstream API error' });
       return;
     }
     res.status(200).json(data);
   } catch (err) {
+    console.error('nutrition-plan proxy error', err);
     res.status(500).json({ error: (err && err.message) || 'Server error contacting Anthropic API' });
   }
 };
