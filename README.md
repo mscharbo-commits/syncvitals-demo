@@ -12,15 +12,22 @@ Four standalone demo portals wired to one shared, evolving dataset instead of ea
 - `sv-patient-nutrition.html` — Patient Nutrition Portal (food logging, condition-specific guidance)
 
 ## Risk scoring architecture
-The composite risk score is no longer an unnamed points system. It's built in two layers:
+**Predict AI is the sole authority on risk scores — Command Dashboard and Nurse Portal are read-only spokes, not independent assessors.**
 
-1. **NEWS2 (National Early Warning Score 2)** — the acuity core, computed identically by every portal via `SVEngine.computeNEWS2()`. NEWS2 was originally published by the Royal College of Physicians (UK, 2017 update) and endorsed by NHS England, but it also has direct U.S. federal healthcare adoption worth leading with for a U.S. audience:
+- **Predict AI** computes and pushes `riskScore`, `er48h`, `hosp30d`, `newsScore`/`newsBand`, and the clinical narrative for every patient via `SVEngine.setDerived(id, {..., source:'predict'})`. Once it has assessed a patient, that assessment is authoritative for the rest of the session.
+- **The shared engine** (`data-engine.js`) provides a NEWS2-only fallback (`source:'engine'`) so numbers are never blank before Predict AI has run for a patient — but the moment Predict AI enriches a patient, the engine's own per-tick recompute (`fallbackComposite()`) stops touching that patient's score. Vitals and the NEWS2 number itself keep evolving underneath either way — only the composite assessment is gated.
+- **Command Dashboard** no longer computes or pushes a competing score. It still runs local anomaly detection (for its own alerts panel) and its pipeline visualization, but the risk number / ER% / admit% / narrative it displays are read directly from whatever Predict AI (or the engine fallback) last set. The UI shows which one is currently active ("✓ Predict AI" vs "⏳ NEWS2 baseline").
+- **Nurse Portal** has always been read-only for this data; its panel now correctly attributes the source as Predict AI rather than Command Dashboard.
+
+Underneath that hub-and-spoke structure, the composite score is still built in two layers:
+
+1. **NEWS2 (National Early Warning Score 2)** — the acuity core, computed identically everywhere via `SVEngine.computeNEWS2()`. NEWS2 was originally published by the Royal College of Physicians (UK, 2017 update) and endorsed by NHS England, but it also has direct U.S. federal healthcare adoption worth leading with for a U.S. audience:
    - Selected for inclusion in the **U.S. Department of Veterans Affairs' new nationwide federal Electronic Health Record**.
    - Peer-reviewed validation in a U.S. Veteran population at Kansas City VA Medical Center (4,781 patients, 142,375 NEWS readings, AUC 0.72 for predicting 24h ICU transfer/mortality).
    - Subject of a formal evidence review commissioned directly by the VA's Evidence-based Synthesis Program to guide system-wide implementation.
-2. **Condition-specific modifiers**, layered on top and individually sourced: glucose thresholds from ADA Standards of Care (diabetes), CHF rapid-weight-gain thresholds from standard AHA self-monitoring guidance, hypertension staging from AHA/ACC (2017 guideline, JNC8 lineage), hyperkalemia thresholds from KDIGO (CKD), and FEV1% staging from GOLD 2024 (COPD).
+2. **Condition-specific modifiers**, layered on top and individually sourced: glucose thresholds from ADA Standards of Care (diabetes), CHF rapid-weight-gain thresholds from standard AHA self-monitoring guidance, hypertension staging from AHA/ACC (2017 guideline, JNC8 lineage), hyperkalemia + eGFR staging from KDIGO (CKD), and FEV1% staging from GOLD 2024 (COPD).
 
-This split matters for credibility: the NEWS2 layer is a real, citable, externally validated instrument with genuine U.S. federal deployment; the condition-specific modifiers are guideline-sourced but not independently validated as a combined predictive model. Command Dashboard and Predict AI can enrich a patient's `riskScore`/`er48h`/`hosp30d`/narrative when open, but `newsScore`/`newsBand` always stay engine-computed so the core acuity signal is consistent everywhere.
+This split matters for credibility: the NEWS2 layer is a real, citable, externally validated instrument with genuine U.S. federal deployment; the condition-specific modifiers are guideline-sourced but not independently validated as a combined predictive model.
 
 ## AI nutrition plan generation
 The Nurse Portal's "AI Build" nutrition planner (`nutrAIBuild()` in `syncvitals-rpm.html`) calls `/api/nutrition-plan`, a Vercel serverless function that holds the real Anthropic API key and forwards the request. This requires an **`ANTHROPIC_API_KEY`** environment variable set on the Vercel project (Project Settings → Environment Variables). Without it, the function returns an error and the UI automatically falls back to a rule-based offline plan — so the feature degrades gracefully either way, it just won't be true AI-generated content until the key is set.
