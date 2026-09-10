@@ -7598,10 +7598,10 @@ async function nutrAIBuild() {
   const riskNote = predScores ? 'Risk score: ' + predScores.riskScore + '/100' : '';
   const prompt = 'You are a clinical dietitian for an RPM platform. Build a detailed, personalized nutrition plan.\n\nPATIENT:\n- Name: ' + p.name + ', Age: ' + (p.age||'unknown') + '\n- Conditions: ' + conditions + '\n- ' + riskNote + '\n- Framework: ' + framework + '\n- Calories: ' + caloriesSel + '\n- Strictness: ' + strict + '\n- Activity: ' + activity + '\n- Notes: ' + (notes||'none') + '\n\nReturn ONLY a JSON object with this structure:\n{"framework":"...","source":"...","rationale":"...","goals":{"calories":null,"sodium":null,"potassium":null,"protein":null,"carbs":null,"fluid":null,"phosphorus":null,"sugar":null,"fiber":null,"fat":null,"saturatedFat":null,"avoid":"...","recommend":"...","activity":"...","source":"..."},"mealGuidance":{"breakfast":"...","lunch":"...","dinner":"...","snacks":"..."},"alerts":["..."],"tips":["..."]}';
   try {
-    const resp = await fetch('https://api.anthropic.com/v1/messages', {
+    const resp = await fetch('/api/nutrition-plan', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'anthropic-dangerous-direct-browser-access': 'true' },
-      body: JSON.stringify({ model: 'claude-sonnet-4-20250514', max_tokens: 1500, messages: [{ role: 'user', content: prompt }] })
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt, maxTokens: 1500 })
     });
     if (!resp.ok) throw new Error('API ' + resp.status);
     const data = await resp.json();

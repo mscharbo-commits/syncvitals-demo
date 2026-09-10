@@ -5,10 +5,14 @@ Four standalone demo portals wired to one shared, evolving dataset instead of ea
 ## Files
 - `index.html` — landing page linking all four portals, with a live status of the shared dataset
 - `data-engine.js` — the shared data engine: seeds 6 demo patients, evolves their vitals every 8 seconds, computes baseline risk/ER/hospitalization scores, and persists/broadcasts state so every open tab stays in sync
+- `api/nutrition-plan.js` — serverless function that proxies AI nutrition plan generation to the Anthropic API, keeping the API key server-side (never exposed to the browser)
 - `syncvitals-command.html` — Command Dashboard (risk-scoring pipeline + AI narrative)
 - `syncvitals-predict.html` — Prediction AI (disease-specific deterioration modeling)
 - `syncvitals-rpm.html` — Nurse Portal / RPM (patient registry, trend charts, care plans, escalation)
 - `sv-patient-nutrition.html` — Patient Nutrition Portal (food logging, condition-specific guidance)
+
+## AI nutrition plan generation
+The Nurse Portal's "AI Build" nutrition planner (`nutrAIBuild()` in `syncvitals-rpm.html`) calls `/api/nutrition-plan`, a Vercel serverless function that holds the real Anthropic API key and forwards the request. This requires an **`ANTHROPIC_API_KEY`** environment variable set on the Vercel project (Project Settings → Environment Variables). Without it, the function returns an error and the UI automatically falls back to a rule-based offline plan — so the feature degrades gracefully either way, it just won't be true AI-generated content until the key is set.
 
 ## How it's wired together
 - `data-engine.js` is loaded by every portal and owns one canonical patient dataset in `localStorage` (`sv_shared_state_v1`), replicated across tabs via `BroadcastChannel` and the native `storage` event.

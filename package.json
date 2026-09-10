@@ -1,0 +1,6 @@
+{
+  "name": "syncvitals-demo",
+  "version": "1.0.0",
+  "private": true,
+  "description": "SyncVitals connected demo — static portals + a shared data engine + a serverless AI proxy for nutrition plan generation."
+}
