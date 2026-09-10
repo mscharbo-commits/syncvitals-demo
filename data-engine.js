@@ -18,40 +18,40 @@
 
   const SEED_PATIENTS = [
     { id: 'P001', name: 'Margaret Okafor', age: 68, dx: 'HTN Stage 2, CKD Stage 3',
-      conditions: ['HTN', 'CKD'], phase: 30, riskBase: 62, deteriorating: true, severityCap: 0.55, baselineWeight: 162,
+      conditions: ['HTN', 'CKD'], phase: 30, riskBase: 66, deteriorating: true, severityCap: 0.65, baselineWeight: 162,
       vitals: { sbp: 172, dbp: 98, hr: 88, spo2: 97, weight: 162, glucose: null, rr: 18, temp: 37.0, consciousness: 'alert', supplementalO2: false, potassium: 5.0, fev1pct: null, egfr: 44 } },
     { id: 'P002', name: 'Robert Chen', age: 74, dx: 'CHF NYHA III, T2DM, HFrEF EF 40%',
-      conditions: ['CHF', 'DM'], phase: 30, riskBase: 76, deteriorating: true, severityCap: 0.75, baselineWeight: 196,
+      conditions: ['CHF', 'DM'], phase: 30, riskBase: 80, deteriorating: true, severityCap: 0.85, baselineWeight: 196,
       vitals: { sbp: 148, dbp: 88, hr: 96, spo2: 93, weight: 203, glucose: 218, rr: 20, temp: 37.1, consciousness: 'alert', supplementalO2: false, potassium: null, fev1pct: null, egfr: null } },
     { id: 'P003', name: 'Diane Morales', age: 61, dx: 'COPD GOLD II, Declining SpO2',
-      conditions: ['COPD'], phase: 60, riskBase: 58, deteriorating: true, severityCap: 0.5, baselineWeight: 154,
+      conditions: ['COPD'], phase: 60, riskBase: 62, deteriorating: true, severityCap: 0.65, baselineWeight: 154,
       vitals: { sbp: 128, dbp: 80, hr: 82, spo2: 89, weight: 154, glucose: null, rr: 22, temp: 37.0, consciousness: 'alert', supplementalO2: false, potassium: null, fev1pct: 58, egfr: null } },
     { id: 'P004', name: 'James Okafor', age: 71, dx: 'T2DM, HTN Stage 1, Stable',
-      conditions: ['DM', 'HTN'], phase: 60, riskBase: 30, deteriorating: false, severityCap: 0, baselineWeight: 188,
+      conditions: ['DM', 'HTN'], phase: 60, riskBase: 35, deteriorating: false, severityCap: 0, baselineWeight: 188,
       vitals: { sbp: 136, dbp: 84, hr: 74, spo2: 98, weight: 188, glucose: 142, rr: 16, temp: 36.8, consciousness: 'alert', supplementalO2: false, potassium: null, fev1pct: null, egfr: null } },
     { id: 'P005', name: 'Patricia Walsh', age: 79, dx: 'CHF NYHA I, Stable',
-      conditions: ['CHF'], phase: 60, riskBase: 36, deteriorating: false, severityCap: 0, baselineWeight: 155,
+      conditions: ['CHF'], phase: 60, riskBase: 48, deteriorating: false, severityCap: 0.2, baselineWeight: 155,
       vitals: { sbp: 132, dbp: 78, hr: 74, spo2: 96, weight: 158, glucose: null, rr: 16, temp: 36.9, consciousness: 'alert', supplementalO2: false, potassium: null, fev1pct: null, egfr: null } },
     { id: 'P006', name: 'Marcus Rivera', age: 52, dx: 'HTN Stage 2, Non-Adherent',
-      conditions: ['HTN'], phase: 30, riskBase: 52, deteriorating: true, severityCap: 0.4, baselineWeight: 195,
+      conditions: ['HTN'], phase: 30, riskBase: 58, deteriorating: true, severityCap: 0.5, baselineWeight: 195,
       vitals: { sbp: 158, dbp: 96, hr: 88, spo2: 98, weight: 195, glucose: null, rr: 18, temp: 37.0, consciousness: 'alert', supplementalO2: false, potassium: null, fev1pct: null, egfr: null } },
     { id: 'P007', name: 'Carlos Mendez', age: 58, dx: 'Type 2 Diabetes Mellitus, Hypertension Stage 1',
-      conditions: ['DM', 'HTN'], phase: 30, riskBase: 48, deteriorating: false, severityCap: 0.15, baselineWeight: 192,
+      conditions: ['DM', 'HTN'], phase: 30, riskBase: 52, deteriorating: false, severityCap: 0.32, baselineWeight: 192,
       vitals: { sbp: 148, dbp: 88, hr: 78, spo2: 98, weight: 196, glucose: 218, rr: 16, temp: 37.0, consciousness: 'alert', supplementalO2: false, potassium: null, fev1pct: null, egfr: null } },
     { id: 'P008', name: 'Linda Park', age: 66, dx: 'COPD GOLD I, Well-Controlled',
-      conditions: ['COPD'], phase: 30, riskBase: 32, deteriorating: false, severityCap: 0.1, baselineWeight: 142,
+      conditions: ['COPD'], phase: 30, riskBase: 35, deteriorating: false, severityCap: 0.05, baselineWeight: 142,
       vitals: { sbp: 124, dbp: 76, hr: 76, spo2: 95, weight: 142, glucose: null, rr: 17, temp: 36.9, consciousness: 'alert', supplementalO2: false, potassium: null, fev1pct: 68, egfr: null } },
     { id: 'P009', name: 'Harold Jenkins', age: 70, dx: 'CKD Stage 2, Stable',
-      conditions: ['CKD'], phase: 30, riskBase: 28, deteriorating: false, severityCap: 0.1, baselineWeight: 178,
+      conditions: ['CKD'], phase: 30, riskBase: 42, deteriorating: false, severityCap: 0.25, baselineWeight: 178,
       vitals: { sbp: 130, dbp: 80, hr: 72, spo2: 97, weight: 178, glucose: null, rr: 15, temp: 36.8, consciousness: 'alert', supplementalO2: false, potassium: 4.4, fev1pct: null, egfr: 68 } },
     { id: 'P010', name: 'Susan Whitfield', age: 67, dx: 'CHF NYHA II, Early Decompensation Risk',
-      conditions: ['CHF'], phase: 30, riskBase: 44, deteriorating: true, severityCap: 0.3, baselineWeight: 168,
+      conditions: ['CHF'], phase: 30, riskBase: 58, deteriorating: true, severityCap: 0.55, baselineWeight: 168,
       vitals: { sbp: 138, dbp: 84, hr: 84, spo2: 95, weight: 169, glucose: null, rr: 18, temp: 37.0, consciousness: 'alert', supplementalO2: false, potassium: null, fev1pct: null, egfr: null } },
     { id: 'P011', name: 'David Kim', age: 45, dx: 'HTN Stage 1, Well-Controlled',
-      conditions: ['HTN'], phase: 30, riskBase: 20, deteriorating: false, severityCap: 0.08, baselineWeight: 185,
+      conditions: ['HTN'], phase: 30, riskBase: 30, deteriorating: false, severityCap: 0.05, baselineWeight: 185,
       vitals: { sbp: 128, dbp: 82, hr: 70, spo2: 99, weight: 185, glucose: null, rr: 14, temp: 36.7, consciousness: 'alert', supplementalO2: false, potassium: null, fev1pct: null, egfr: null } },
     { id: 'P012', name: 'Angela Brooks', age: 54, dx: 'T2DM, Newly Diagnosed',
-      conditions: ['DM'], phase: 30, riskBase: 38, deteriorating: true, severityCap: 0.25, baselineWeight: 204,
+      conditions: ['DM'], phase: 30, riskBase: 50, deteriorating: true, severityCap: 0.45, baselineWeight: 204,
       vitals: { sbp: 134, dbp: 82, hr: 80, spo2: 98, weight: 204, glucose: 176, rr: 16, temp: 37.0, consciousness: 'alert', supplementalO2: false, potassium: null, fev1pct: null, egfr: null } },
   ];
 
@@ -257,6 +257,11 @@
     }
     if (p.adherence === 'no') score += 14; else if (p.adherence === 'partial') score += 7;
 
+    // Chronic disease burden floor — everyone in an RPM program has a
+    // diagnosed chronic condition, so composite risk never drops below a
+    // level reflecting overall disease severity, even on a good-vitals day.
+    // Acute NEWS2/condition signals above this floor still push it higher.
+    score = Math.max(score, p.riskBase);
     score = clamp(Math.round(score), 5, 98);
     const er = clamp(Math.round(score * 0.45 + (v.spo2 != null && v.spo2 < 92 ? 15 : 0)), 2, 95);
     const hosp = clamp(Math.round(score * 0.6 + er * 0.25 + Math.max(0, (p.age - 65) * 0.4)), 3, 95);
