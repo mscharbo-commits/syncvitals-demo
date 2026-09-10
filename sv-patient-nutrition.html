@@ -1,0 +1,2159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>SyncVitals · My Nutrition</title>
+<style>
+  /* ── DESIGN: Clean mobile-first health app, teal/navy, card-based, warm whites ── */
+  @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap');
+
+  :root {
+    --navy: #0D2E6E;
+    --teal: #1D9E75;
+    --teal-lt: #EAF3DE;
+    --blue: #185FA5;
+    --red: #E24B4A;
+    --amber: #EF9F27;
+    --bg: #F5F7FA;
+    --card: #FFFFFF;
+    --border: #E8ECF2;
+    --text: #1A1A2E;
+    --muted: #7A8099;
+    --pill-h: 44px;
+    --radius: 14px;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  html, body { height: 100%; font-family: 'DM Sans', sans-serif; background: var(--bg); color: var(--text); }
+  
+  /* ── SCREENS ── */
+  .screen { display: none; flex-direction: column; min-height: 100vh; }
+  .screen.active { display: flex; }
+
+  /* ── LOGIN SCREEN ── */
+  #s-login {
+    background: linear-gradient(160deg, #0D2E6E 0%, #1D6035 60%, #1D9E75 100%);
+    align-items: center; justify-content: center; padding: 40px 24px;
+  }
+  .login-logo { text-align: center; margin-bottom: 40px; }
+  .login-logo-mark {
+    width: 64px; height: 64px; background: rgba(255,255,255,0.15); border-radius: 18px;
+    display: flex; align-items: center; justify-content: center; margin: 0 auto 12px;
+    backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.2);
+  }
+  .login-logo-mark svg { width: 36px; height: 36px; }
+  .login-brand { font-size: 28px; font-weight: 700; color: #fff; letter-spacing: -0.5px; }
+  .login-tagline { font-size: 14px; color: rgba(255,255,255,0.65); margin-top: 4px; }
+  .login-card {
+    background: rgba(255,255,255,0.95); border-radius: 20px; padding: 28px 24px;
+    width: 100%; max-width: 380px; box-shadow: 0 24px 64px rgba(0,0,0,0.2);
+  }
+  .login-title { font-size: 20px; font-weight: 700; color: var(--navy); margin-bottom: 6px; }
+  .login-sub { font-size: 13px; color: var(--muted); margin-bottom: 24px; }
+  .field { margin-bottom: 14px; }
+  .field label { font-size: 12px; font-weight: 600; color: var(--navy); display: block; margin-bottom: 6px; letter-spacing: 0.02em; }
+  .field input, .field select {
+    width: 100%; padding: 12px 14px; border-radius: 10px; border: 1.5px solid var(--border);
+    font-size: 15px; font-family: inherit; color: var(--text); background: #FAFBFC; transition: border 0.15s;
+  }
+  .field input:focus, .field select:focus { outline: none; border-color: var(--teal); background: #fff; }
+  .btn-primary {
+    width: 100%; padding: 14px; background: var(--navy); color: #fff; border: none;
+    border-radius: 10px; font-size: 15px; font-weight: 700; font-family: inherit; cursor: pointer;
+    transition: all 0.15s; margin-top: 4px;
+  }
+  .btn-primary:active { transform: scale(0.98); }
+  .btn-primary.teal { background: linear-gradient(135deg, #1D6035, #1D9E75); }
+  .btn-secondary {
+    width: 100%; padding: 12px; background: transparent; color: var(--navy); border: 1.5px solid var(--border);
+    border-radius: 10px; font-size: 14px; font-weight: 600; font-family: inherit; cursor: pointer; margin-top: 8px;
+  }
+  .demo-hint { background: #EAF3DE; border-radius: 10px; padding: 12px 14px; margin-top: 14px; font-size: 12px; color: #27500A; }
+  .demo-hint strong { display: block; margin-bottom: 4px; }
+
+  /* ── TOP BAR ── */
+  .topbar {
+    background: var(--navy); padding: 16px 20px 12px; display: flex;
+    align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 100;
+  }
+  .topbar-logo { font-size: 16px; font-weight: 700; color: #fff; letter-spacing: -0.3px; }
+  .topbar-logo span { color: #4DD8A0; }
+  .topbar-user { display: flex; align-items: center; gap: 8px; }
+  .topbar-avatar {
+    width: 32px; height: 32px; background: rgba(255,255,255,0.2); border-radius: 50%;
+    display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; color: #fff;
+  }
+  .topbar-name { font-size: 13px; color: rgba(255,255,255,0.8); }
+
+  /* ── BOTTOM NAV ── */
+  .bottom-nav {
+    position: fixed; bottom: 0; left: 0; right: 0; background: var(--card);
+    border-top: 1px solid var(--border); display: flex; z-index: 100;
+    padding-bottom: env(safe-area-inset-bottom, 0);
+  }
+  .nav-item {
+    flex: 1; display: flex; flex-direction: column; align-items: center;
+    padding: 10px 0 8px; cursor: pointer; border: none; background: none;
+    font-family: inherit; color: var(--muted); transition: color 0.15s;
+  }
+  .nav-item.active { color: var(--teal); }
+  .nav-item .nav-icon { font-size: 20px; margin-bottom: 2px; }
+  .nav-item .nav-label { font-size: 10px; font-weight: 600; letter-spacing: 0.03em; }
+
+  /* ── SCROLL CONTENT ── */
+  .page-content { flex: 1; overflow-y: auto; padding: 16px; padding-bottom: 90px; }
+
+  /* ── CARDS ── */
+  .card { background: var(--card); border-radius: var(--radius); padding: 16px; margin-bottom: 12px; border: 0.5px solid var(--border); }
+  .card-title { font-size: 13px; font-weight: 700; color: var(--navy); margin-bottom: 12px; text-transform: uppercase; letter-spacing: 0.05em; }
+
+  /* ── MACRO RINGS / PROGRESS ── */
+  .macro-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+  .macro-card { background: var(--bg); border-radius: 10px; padding: 12px; text-align: center; }
+  .macro-label { font-size: 10px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 4px; }
+  .macro-val { font-size: 22px; font-weight: 700; color: var(--navy); line-height: 1; }
+  .macro-unit { font-size: 11px; color: var(--muted); }
+  .macro-goal { font-size: 11px; color: var(--muted); margin-top: 2px; }
+  .progress { height: 6px; background: var(--border); border-radius: 3px; margin-top: 6px; overflow: hidden; }
+  .progress-fill { height: 100%; border-radius: 3px; transition: width 0.4s; }
+  .progress-fill.teal { background: var(--teal); }
+  .progress-fill.amber { background: var(--amber); }
+  .progress-fill.red { background: var(--red); }
+  .macro-val.over { color: var(--red); }
+  .macro-val.warn { color: var(--amber); }
+
+  /* ── MEAL LOG ── */
+  .meal-section { margin-bottom: 8px; }
+  .meal-header {
+    font-size: 12px; font-weight: 700; color: var(--muted); text-transform: uppercase;
+    letter-spacing: 0.06em; margin-bottom: 6px; display: flex; align-items: center; justify-content: space-between;
+  }
+  .meal-header .add-btn {
+    font-size: 11px; color: var(--teal); font-weight: 700; cursor: pointer;
+    background: none; border: none; font-family: inherit; padding: 0;
+  }
+  .food-row {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 10px 12px; background: var(--card); border-radius: 10px;
+    margin-bottom: 6px; border: 0.5px solid var(--border);
+  }
+  .food-name { font-size: 13px; font-weight: 500; color: var(--text); }
+  .food-portion { font-size: 11px; color: var(--muted); margin-top: 1px; }
+  .food-cals { font-size: 13px; font-weight: 700; color: var(--navy); }
+  .food-del { color: var(--muted); cursor: pointer; font-size: 16px; margin-left: 10px; background: none; border: none; }
+
+  /* ── SEARCH MODAL ── */
+  .modal-overlay {
+    display: none; position: fixed; inset: 0; background: rgba(10,20,50,0.5);
+    z-index: 200; align-items: flex-end; justify-content: center; backdrop-filter: blur(3px);
+  }
+  .modal-overlay.open { display: flex; }
+  .modal-sheet {
+    background: var(--card); border-radius: 20px 20px 0 0; width: 100%;
+    max-height: 90vh; display: flex; flex-direction: column;
+    padding: 12px 0 0;
+  }
+  .modal-body { flex: 1; overflow-y: auto; padding: 12px 16px 0; }
+  .modal-handle { width: 36px; height: 4px; background: var(--border); border-radius: 2px; margin: 0 auto 16px; }
+  .modal-header { padding: 0 16px 12px; border-bottom: 1px solid var(--border); }
+  .modal-title { font-size: 17px; font-weight: 700; color: var(--navy); margin-bottom: 10px; }
+  .search-box {
+    display: flex; align-items: center; gap: 8px; background: var(--bg);
+    border-radius: 10px; padding: 0 12px; border: 1.5px solid var(--border);
+  }
+  .search-box input {
+    flex: 1; padding: 11px 0; border: none; background: none; font-size: 15px;
+    font-family: inherit; color: var(--text); outline: none;
+  }
+  .modal-body { flex: 1; overflow-y: auto; padding: 12px 16px; }
+  .food-result {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 12px; border-radius: 10px; cursor: pointer; transition: background 0.1s;
+    border: 0.5px solid var(--border); margin-bottom: 8px;
+  }
+  .food-result:active { background: var(--bg); }
+  .food-result-name { font-size: 14px; font-weight: 500; color: var(--text); }
+  .food-result-detail { font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .food-result-cals { font-size: 14px; font-weight: 700; color: var(--navy); }
+  .custom-entry { text-align: center; padding: 16px; }
+
+  /* ── PORTION MODAL ── */
+  .portion-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 12px 0; }
+  .portion-btn {
+    padding: 10px; border: 1.5px solid var(--border); border-radius: 10px; background: var(--card);
+    font-size: 13px; font-weight: 600; color: var(--navy); cursor: pointer; text-align: center;
+    font-family: inherit; transition: all 0.1s;
+  }
+  .portion-btn.active { border-color: var(--teal); background: var(--teal-lt); color: var(--teal); }
+  .custom-portion { display: flex; gap: 8px; align-items: center; }
+  .custom-portion input { flex: 1; padding: 10px 12px; border: 1.5px solid var(--border); border-radius: 10px; font-size: 14px; font-family: inherit; }
+
+  /* ── ALERTS ── */
+  .alert-banner {
+    border-radius: 10px; padding: 12px 14px; margin-bottom: 10px;
+    display: flex; align-items: flex-start; gap: 10px; font-size: 13px;
+  }
+  .alert-banner.red { background: #FFF0F0; border: 1px solid #FFCDD2; color: #C62828; }
+  .alert-banner.amber { background: #FFF8E1; border: 1px solid #FFE082; color: #E65100; }
+  .alert-banner.teal { background: var(--teal-lt); border: 1px solid #A5D6A7; color: #1B5E20; }
+
+  /* ── ACTIVITY ── */
+  .activity-row {
+    display: flex; align-items: center; gap: 12px; padding: 12px;
+    background: var(--card); border-radius: 10px; margin-bottom: 8px; border: 0.5px solid var(--border);
+  }
+  .activity-icon { width: 38px; height: 38px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 18px; flex-shrink: 0; }
+  .activity-name { font-size: 13px; font-weight: 600; color: var(--text); }
+  .activity-detail { font-size: 12px; color: var(--muted); }
+  .activity-cal { font-size: 13px; font-weight: 700; color: var(--teal); margin-left: auto; }
+
+  /* ── TREND CHART ── */
+  .chart-wrap { width: 100%; height: 140px; position: relative; }
+  canvas { width: 100% !important; }
+
+  /* ── SETTINGS / PROFILE ── */
+  .settings-row {
+    display: flex; align-items: center; justify-content: space-between; padding: 14px 0;
+    border-bottom: 0.5px solid var(--border);
+  }
+  .settings-row:last-child { border-bottom: none; }
+  .settings-label { font-size: 14px; color: var(--text); }
+  .settings-val { font-size: 14px; color: var(--muted); font-weight: 500; }
+  .badge { display: inline-flex; align-items: center; font-size: 11px; font-weight: 600; padding: 3px 9px; border-radius: 20px; }
+  .badge.teal { background: var(--teal-lt); color: #1B5E20; }
+  .badge.red { background: #FFF0F0; color: var(--red); }
+  .badge.amber { background: #FFF8E1; color: #E65100; }
+
+  /* ── DATE NAV ── */
+  .date-nav { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+  .date-nav-btn { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 6px 12px; font-size: 18px; cursor: pointer; }
+  .date-label { font-size: 14px; font-weight: 700; color: var(--navy); }
+
+  /* ── TOAST ── */
+  #toast {
+    position: fixed; bottom: 90px; left: 50%; transform: translateX(-50%);
+    background: var(--navy); color: #fff; padding: 10px 20px; border-radius: 10px;
+    font-size: 13px; font-weight: 600; z-index: 500; display: none;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.2); white-space: nowrap;
+  }
+
+  /* ── CUSTOM FOOD FORM ── */
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .mini-field label { font-size: 11px; font-weight: 600; color: var(--muted); display: block; margin-bottom: 4px; }
+  .mini-field input {
+    width: 100%; padding: 9px 10px; border-radius: 8px; border: 1.5px solid var(--border);
+    font-size: 14px; font-family: inherit; color: var(--text);
+  }
+  .tab-bar { display: flex; gap: 4px; background: var(--bg); border-radius: 10px; padding: 4px; margin-bottom: 14px; }
+  .tab-btn {
+    flex: 1; padding: 8px; border: none; border-radius: 7px; background: none;
+    font-size: 13px; font-weight: 600; color: var(--muted); cursor: pointer; font-family: inherit;
+  }
+  .tab-btn.active { background: var(--card); color: var(--navy); box-shadow: 0 1px 4px rgba(0,0,0,0.08); }
+</style>
+<script src="data-engine.js"></script>
+</head>
+<body>
+
+<!-- ══════════════════════════════════════════════ -->
+<!-- LOGIN SCREEN                                   -->
+<!-- ══════════════════════════════════════════════ -->
+<div id="s-login" class="screen active">
+  <div class="login-logo">
+    <div class="login-logo-mark">
+      <svg viewBox="0 0 36 36" fill="none">
+        <circle cx="18" cy="18" r="14" stroke="white" stroke-width="2"/>
+        <path d="M12 18h12M18 12v12" stroke="white" stroke-width="2.5" stroke-linecap="round"/>
+      </svg>
+    </div>
+    <div class="login-brand">Sync<span style="color:#4DD8A0">Vitals</span></div>
+    <div class="login-tagline">Patient Nutrition Portal</div>
+  </div>
+
+  <div class="login-card">
+    <div class="login-title">Sign in</div>
+    <div class="login-sub">Log your food, track your goals, stay on track.</div>
+
+    <div class="field">
+      <label>Patient</label>
+      <select id="login-patient">
+        <option value="">Select your name…</option>
+        <option value="P001">Margaret Okafor (HTN · CKD)</option>
+        <option value="P002">Robert Chen (CHF · Diabetes)</option>
+        <option value="P003">Diane Morales (COPD)</option>
+        <option value="P004">James Okafor (Diabetes · HTN)</option>
+        <option value="P005">Patricia Walsh (CHF)</option>
+        <option value="P006">Marcus Rivera (HTN)</option>
+        <option value="P007">Carlos Mendez (Diabetes · HTN)</option>
+      </select>
+    </div>
+    <div class="field">
+      <label>Date of Birth</label>
+      <input type="date" id="login-dob" placeholder="MM/DD/YYYY">
+    </div>
+    <div class="field">
+      <label>PIN (4 digits)</label>
+      <input type="password" id="login-pin" maxlength="4" inputmode="numeric" placeholder="••••">
+    </div>
+
+    <button class="btn-primary" onclick="doLogin()">Sign In →</button>
+    <button class="btn-secondary" onclick="doDemo()">Try Demo (no login required)</button>
+
+    <div class="demo-hint">
+      <strong>Demo credentials</strong>
+      Select any patient · Any date of birth · PIN: <strong>1234</strong>
+    </div>
+    <button class="btn-secondary" style="margin-top:10px;font-size:12px;color:#999;border-color:#eee" onclick="clearAllData()">🗑️ Clear all stored data (fresh start)</button>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════ -->
+<!-- MAIN APP SCREEN                                -->
+<!-- ══════════════════════════════════════════════ -->
+<div id="s-app" class="screen">
+
+  <!-- Top bar -->
+  <div class="topbar">
+    <div class="topbar-logo">Sync<span>Vitals</span></div>
+    <div class="topbar-user">
+      <div class="topbar-name" id="topbar-name"></div>
+      <div class="topbar-avatar" id="topbar-avatar"></div>
+    </div>
+  </div>
+
+  <!-- Pages -->
+  <div id="page-diary" class="page-content">
+    <!-- Diary content injected by JS -->
+  </div>
+  <div id="page-activity" class="page-content" style="display:none">
+    <!-- Activity content injected by JS -->
+  </div>
+  <div id="page-trends" class="page-content" style="display:none">
+    <!-- Trends content injected by JS -->
+  </div>
+  <div id="page-profile" class="page-content" style="display:none">
+    <!-- Profile content injected by JS -->
+  </div>
+
+  <!-- Bottom nav -->
+  <div class="bottom-nav">
+    <button class="nav-item active" onclick="showPage('diary',this)">
+      <div class="nav-icon">🍽️</div>
+      <div class="nav-label">Food Log</div>
+    </button>
+    <button class="nav-item" onclick="showPage('activity',this)">
+      <div class="nav-icon">🏃</div>
+      <div class="nav-label">Activity</div>
+    </button>
+    <button class="nav-item" onclick="showPage('trends',this)">
+      <div class="nav-icon">📊</div>
+      <div class="nav-label">Trends</div>
+    </button>
+    <button class="nav-item" onclick="showPage('profile',this)">
+      <div class="nav-icon">👤</div>
+      <div class="nav-label">My Plan</div>
+    </button>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════ -->
+<!-- FOOD SEARCH MODAL                              -->
+<!-- ══════════════════════════════════════════════ -->
+<div id="modal-search" class="modal-overlay" onclick="if(event.target===this)closeSearch()">
+  <div class="modal-sheet">
+    <div class="modal-handle"></div>
+    <div class="modal-header">
+      <div class="modal-title" id="search-meal-label">Add to Breakfast</div>
+      <div class="tab-bar">
+        <button class="tab-btn active" onclick="setSearchTab('search',this)">🔍 Search</button>
+        <button class="tab-btn" onclick="setSearchTab('custom',this)">✏️ Custom</button>
+      </div>
+      <div id="search-tab-search">
+        <div class="search-box">
+          <span>🔍</span>
+          <input id="food-search-input" type="search" placeholder="Search foods… e.g. oatmeal, salmon"
+                 oninput="searchFoods(this.value)" autocomplete="off">
+        </div>
+      </div>
+      <div id="search-tab-custom" style="display:none">
+        <div class="two-col">
+          <div class="mini-field"><label>Food name</label><input id="c-name" placeholder="e.g. Mom's soup"></div>
+          <div class="mini-field"><label>Calories</label><input id="c-cal" type="number" placeholder="250"></div>
+          <div class="mini-field"><label>Sodium (mg)</label><input id="c-sodium" type="number" placeholder="400"></div>
+          <div class="mini-field"><label>Protein (g)</label><input id="c-protein" type="number" placeholder="15"></div>
+          <div class="mini-field"><label>Carbs (g)</label><input id="c-carbs" type="number" placeholder="30"></div>
+          <div class="mini-field"><label>Potassium (mg)</label><input id="c-potassium" type="number" placeholder="300"></div>
+          <div class="mini-field"><label>Sugar (g)</label><input id="c-sugar" type="number" placeholder="8"></div>
+          <div class="mini-field"><label>Fat (g)</label><input id="c-fat" type="number" placeholder="10"></div>
+        </div>
+        <button class="btn-primary teal" style="margin-top:10px" onclick="addCustomFood()">Add Custom Food</button>
+      </div>
+    </div>
+    <div class="modal-body" id="search-results">
+      <div style="text-align:center;padding:32px;color:var(--muted);font-size:14px">Start typing to search foods…</div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════ -->
+<!-- PORTION MODAL                                  -->
+<!-- ══════════════════════════════════════════════ -->
+<div id="modal-portion" class="modal-overlay" onclick="if(event.target===this)closePortion()">
+  <div class="modal-sheet" style="max-height:88vh">
+    <div class="modal-handle"></div>
+    <div class="modal-header">
+      <div class="modal-title" id="portion-food-name">Select Portion</div>
+      <div style="font-size:13px;color:var(--muted);margin-top:4px" id="portion-food-detail"></div>
+    </div>
+    <div class="modal-body">
+
+      <!-- Live nutrient preview bar -->
+      <div id="portion-preview" style="background:var(--bg);border-radius:10px;padding:10px 14px;margin-bottom:14px;display:flex;justify-content:space-around;text-align:center">
+        <div><div style="font-size:18px;font-weight:700;color:var(--navy)" id="prev-cal">0</div><div style="font-size:10px;color:var(--muted)">cal</div></div>
+        <div><div style="font-size:18px;font-weight:700;color:var(--amber)" id="prev-na">0</div><div style="font-size:10px;color:var(--muted)">mg Na</div></div>
+        <div><div style="font-size:18px;font-weight:700;color:var(--blue)" id="prev-k">0</div><div style="font-size:10px;color:var(--muted)">mg K</div></div>
+        <div><div style="font-size:18px;font-weight:700;color:var(--teal)" id="prev-pro">0</div><div style="font-size:10px;color:var(--muted)">g prot</div></div>
+      </div>
+
+      <!-- Mode tabs -->
+      <div style="display:flex;gap:3px;background:var(--bg);border-radius:9px;padding:3px;margin-bottom:14px">
+        <button class="tab-btn active" id="ptab-servings" onclick="setPortionTab('servings')">🍽️ Servings</button>
+        <button class="tab-btn" id="ptab-grams"    onclick="setPortionTab('grams')">⚖️ Grams</button>
+        <button class="tab-btn" id="ptab-oz"       onclick="setPortionTab('oz')">🇺🇸 Ounces</button>
+      </div>
+
+      <!-- SERVINGS TAB -->
+      <div id="ptab-content-servings">
+        <div style="font-size:12px;color:var(--muted);margin-bottom:8px" id="serving-unit-label">1 serving = 100g</div>
+        <div style="display:flex;align-items:center;justify-content:center;gap:16px;margin-bottom:12px">
+          <button onclick="changeServings(-0.5)" style="width:44px;height:44px;border-radius:50%;border:2px solid var(--border);background:var(--card);font-size:22px;cursor:pointer;display:flex;align-items:center;justify-content:center;line-height:1">−</button>
+          <div style="text-align:center;min-width:80px">
+            <div style="font-size:36px;font-weight:700;color:var(--navy)" id="serving-count">1</div>
+            <div style="font-size:12px;color:var(--muted)" id="serving-unit-name">serving</div>
+          </div>
+          <button onclick="changeServings(0.5)" style="width:44px;height:44px;border-radius:50%;border:2px solid var(--teal);background:var(--teal-lt);font-size:22px;cursor:pointer;display:flex;align-items:center;justify-content:center;line-height:1;color:var(--teal)">+</button>
+        </div>
+        <!-- Quick serving buttons -->
+        <div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:center" id="quick-serving-btns"></div>
+      </div>
+
+      <!-- GRAMS TAB -->
+      <div id="ptab-content-grams" style="display:none">
+        <div style="font-size:12px;color:var(--muted);margin-bottom:8px">Enter weight in grams</div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <button onclick="nudgeGrams(-10)" style="width:40px;height:40px;border-radius:8px;border:1.5px solid var(--border);background:var(--card);font-size:16px;cursor:pointer">−</button>
+          <div style="flex:1;position:relative">
+            <input id="gram-input" type="number" min="1" max="5000" placeholder="100"
+              style="width:100%;padding:11px 36px 11px 14px;border:1.5px solid var(--border);border-radius:10px;font-size:18px;font-weight:600;font-family:inherit;text-align:center"
+              oninput="onGramInput()">
+            <span style="position:absolute;right:10px;top:50%;transform:translateY(-50%);font-size:13px;color:var(--muted);font-weight:600">g</span>
+          </div>
+          <button onclick="nudgeGrams(10)" style="width:40px;height:40px;border-radius:8px;border:1.5px solid var(--teal);background:var(--teal-lt);font-size:16px;cursor:pointer;color:var(--teal)">+</button>
+        </div>
+        <div id="gram-quick-btns" style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap;justify-content:center"></div>
+      </div>
+
+      <!-- OUNCES TAB -->
+      <div id="ptab-content-oz" style="display:none">
+        <div style="font-size:12px;color:var(--muted);margin-bottom:8px">Enter weight in ounces (US)</div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <button onclick="nudgeOz(-0.5)" style="width:40px;height:40px;border-radius:8px;border:1.5px solid var(--border);background:var(--card);font-size:16px;cursor:pointer">−</button>
+          <div style="flex:1;position:relative">
+            <input id="oz-input" type="number" min="0.1" max="200" step="0.5" placeholder="3.5"
+              style="width:100%;padding:11px 36px 11px 14px;border:1.5px solid var(--border);border-radius:10px;font-size:18px;font-weight:600;font-family:inherit;text-align:center"
+              oninput="onOzInput()">
+            <span style="position:absolute;right:10px;top:50%;transform:translateY(-50%);font-size:13px;color:var(--muted);font-weight:600">oz</span>
+          </div>
+          <button onclick="nudgeOz(0.5)" style="width:40px;height:40px;border-radius:8px;border:1.5px solid var(--teal);background:var(--teal-lt);font-size:16px;cursor:pointer;color:var(--teal)">+</button>
+        </div>
+        <div id="oz-quick-btns" style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap;justify-content:center"></div>
+      </div>
+
+      <div style="position:sticky;bottom:0;background:var(--card);padding:12px 0 4px;margin-top:12px;border-top:1px solid var(--border)">
+        <button id="portion-confirm-btn" class="btn-primary teal" style="width:100%;padding:14px;font-size:15px;font-weight:700" onclick="confirmAddFood()">✓ Save to Log</button>
+        <button onclick="closePortion()" style="width:100%;margin-top:8px;padding:11px;background:none;border:1.5px solid var(--border);border-radius:10px;font-size:14px;color:var(--muted);cursor:pointer;font-family:inherit">Cancel</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════ -->
+<!-- ACTIVITY ADD MODAL                             -->
+<!-- ══════════════════════════════════════════════ -->
+<div id="modal-activity" class="modal-overlay" onclick="if(event.target===this)closeActivity()">
+  <div class="modal-sheet" style="max-height:75vh">
+    <div class="modal-handle"></div>
+    <div class="modal-header">
+      <div class="modal-title">Log Activity</div>
+    </div>
+    <div class="modal-body">
+      <div class="field">
+        <label>Activity type</label>
+        <select id="act-type" onchange="updateActCalc()">
+          <option value="walk">Walking</option>
+          <option value="light">Light exercise / stretching</option>
+          <option value="bike">Cycling / stationary bike</option>
+          <option value="swim">Swimming</option>
+          <option value="chair">Chair exercises</option>
+          <option value="stairs">Climbing stairs</option>
+          <option value="other">Other</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Duration (minutes)</label>
+        <input id="act-duration" type="number" value="30" min="1" max="300" oninput="updateActCalc()">
+      </div>
+      <div class="field">
+        <label>Steps (optional)</label>
+        <input id="act-steps" type="number" placeholder="e.g. 2500">
+      </div>
+      <div class="field">
+        <label>Notes</label>
+        <input id="act-notes" type="text" placeholder="e.g. Morning walk around the block">
+      </div>
+      <div id="act-calc" style="background:var(--teal-lt);border-radius:10px;padding:12px;margin-bottom:14px;font-size:13px;color:#1B5E20;font-weight:600">
+        Estimated: ~90 calories burned
+      </div>
+      <button class="btn-primary teal" onclick="saveActivity()">Log Activity</button>
+    </div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div id="toast"></div>
+
+<script>
+// ══════════════════════════════════════════════════
+// DATA — patients, food database, nutrition goals
+// ══════════════════════════════════════════════════
+
+const PATIENTS = {
+  P001: { name:'Margaret Okafor', initials:'MO', conditions:['HTN','CKD'], age:68, dob:'1957-01-01',
+          goals:{ calories:1800, sodium:2000, potassium:2800, protein:50, carbs:200, fluid:2000, phosphorus:800, sugar:40 },
+          avoid:'Bananas, oranges, potatoes, dairy, dark sodas (high K+/phosphorus)', recommend:'Apples, green beans, cauliflower, egg whites, white rice, olive oil' },
+  P002: { name:'Robert Chen', initials:'RC', conditions:['CHF','Diabetes'], age:74, dob:'1951-01-01',
+          goals:{ calories:1800, sodium:1500, potassium:3500, protein:65, carbs:130, fluid:1500, phosphorus:null, sugar:25 },
+          avoid:'Canned soups, deli meats, soy sauce, sugary drinks, white bread (high Na/sugar)', recommend:'Grilled chicken, oatmeal, apples, green beans, olive oil, brown rice' },
+  P003: { name:'Diane Morales', initials:'DM', conditions:['COPD'], age:61, dob:'1964-01-01',
+          goals:{ calories:2000, sodium:2300, potassium:4700, protein:70, carbs:225, fluid:2000, phosphorus:null, sugar:50 },
+          avoid:'Carbonated drinks, fried foods, beans/lentils (cause bloating, worsens breathing)', recommend:'Lean proteins, cooked vegetables, whole grains, fresh fruit, still water' },
+  P004: { name:'James Okafor', initials:'JO', conditions:['Diabetes','HTN'], age:71, dob:'1954-01-01',
+          goals:{ calories:1800, sodium:2300, potassium:4700, protein:65, carbs:130, fluid:2000, phosphorus:null, sugar:25 },
+          avoid:'Fruit juices, white rice, sugary snacks, canned soups, processed meats (high sugar/Na)', recommend:'Oatmeal, grilled chicken, leafy greens, apples, brown rice, olive oil' },
+  P005: { name:'Patricia Walsh', initials:'PW', conditions:['CHF'], age:79, dob:'1946-01-01',
+          goals:{ calories:1600, sodium:1500, potassium:3500, protein:55, carbs:190, fluid:1500, phosphorus:null, sugar:40 },
+          avoid:'Canned soups, deli meats, pickles, soy sauce, salty snacks (high sodium, causes fluid retention)', recommend:'Fresh baked fish, steamed vegetables, fresh fruit, low-sodium chicken broth' },
+  P006: { name:'Marcus Rivera', initials:'MR', conditions:['HTN'], age:52, dob:'1973-01-01',
+          goals:{ calories:2000, sodium:2300, potassium:4700, protein:75, carbs:250, fluid:2500, phosphorus:null, sugar:50 },
+          avoid:'Potato chips, soy sauce, canned soups, fast food burgers, processed meats (raise BP)', recommend:'Fresh fruits, vegetables, whole grains, lean meats, potassium-rich foods (DASH diet)' },
+  P007: { name:'Carlos Mendez', initials:'CM', conditions:['Diabetes','HTN'], age:58, dob:'1967-01-01',
+          goals:{ calories:1800, sodium:2300, potassium:4700, protein:65, carbs:130, fluid:2000, phosphorus:null, sugar:25 },
+          avoid:'Fruit juices, white bread, sugary beverages, white rice, processed snacks (high glycemic)',
+          recommend:'Oatmeal, leafy greens, grilled chicken, apples, brown rice, olive oil, berries' }
+};
+
+// ── FOOD DATABASE (100 common clinical-relevant foods) ──
+const FOOD_DB = [
+  // Breakfast
+  { id:'f001', name:'Oatmeal, plain cooked', portion:'1 cup (234g)', cal:166, sodium:9, potassium:164, protein:6, carbs:28, sugar:0, fat:4, phosphorus:180 },
+  { id:'f002', name:'Oatmeal with brown sugar', portion:'1 cup (240g)', cal:210, sodium:105, potassium:168, protein:5, carbs:40, sugar:14, fat:3, phosphorus:175 },
+  { id:'f003', name:'Egg, large scrambled', portion:'1 egg (61g)', cal:91, sodium:88, potassium:84, protein:6, carbs:1, sugar:1, fat:7, phosphorus:90 },
+  { id:'f004', name:'Egg whites only', portion:'3 whites (99g)', cal:51, sodium:166, potassium:205, protein:11, carbs:1, sugar:1, fat:0, phosphorus:40 },
+  { id:'f005', name:'Whole grain toast', portion:'1 slice (43g)', cal:110, sodium:146, potassium:67, protein:4, carbs:19, sugar:2, fat:2, phosphorus:70 },
+  { id:'f006', name:'Whole milk', portion:'1 cup (244ml)', cal:149, sodium:105, potassium:366, protein:8, carbs:12, sugar:12, fat:8, phosphorus:205 },
+  { id:'f007', name:'Skim milk', portion:'1 cup (244ml)', cal:83, sodium:103, potassium:382, protein:8, carbs:12, sugar:12, fat:0, phosphorus:255 },
+  { id:'f008', name:'Greek yogurt, plain', portion:'6 oz (170g)', cal:100, sodium:65, potassium:240, protein:17, carbs:6, sugar:4, fat:0, phosphorus:200 },
+  { id:'f009', name:'Banana', portion:'1 medium (118g)', cal:105, sodium:1, potassium:422, protein:1, carbs:27, sugar:14, fat:0, phosphorus:26 },
+  { id:'f010', name:'Apple', portion:'1 medium (182g)', cal:95, sodium:2, potassium:195, protein:0, carbs:25, sugar:19, fat:0, phosphorus:20 },
+  { id:'f011', name:'Blueberries', portion:'1/2 cup (74g)', cal:42, sodium:1, potassium:57, protein:1, carbs:11, sugar:7, fat:0, phosphorus:9 },
+  { id:'f012', name:'Orange, navel', portion:'1 medium (140g)', cal:62, sodium:0, potassium:237, protein:1, carbs:15, sugar:12, fat:0, phosphorus:18 },
+
+  // Proteins
+  { id:'f020', name:'Grilled chicken breast', portion:'3 oz (85g)', cal:128, sodium:63, potassium:220, protein:26, carbs:0, sugar:0, fat:3, phosphorus:220 },
+  { id:'f021', name:'Baked salmon', portion:'3 oz (85g)', cal:155, sodium:48, potassium:534, protein:22, carbs:0, sugar:0, fat:7, phosphorus:260 },
+  { id:'f022', name:'Canned tuna (in water)', portion:'3 oz (85g)', cal:109, sodium:287, potassium:201, protein:24, carbs:0, sugar:0, fat:3, phosphorus:210 },
+  { id:'f023', name:'Ground turkey, lean', portion:'3 oz (85g)', cal:146, sodium:66, potassium:248, protein:22, carbs:0, sugar:0, fat:7, phosphorus:195 },
+  { id:'f024', name:'Tofu, firm', portion:'3 oz (85g)', cal:62, sodium:15, potassium:121, protein:7, carbs:2, sugar:0, fat:3, phosphorus:130 },
+  { id:'f025', name:'Deli turkey (low sodium)', portion:'2 slices (56g)', cal:50, sodium:360, potassium:190, protein:10, carbs:1, sugar:0, fat:1, phosphorus:115 },
+  { id:'f026', name:'Deli turkey (regular)', portion:'2 slices (56g)', cal:50, sodium:590, potassium:190, protein:10, carbs:1, sugar:0, fat:1, phosphorus:115 },
+  { id:'f027', name:'Shrimp, boiled', portion:'3 oz (85g)', cal:84, sodium:190, potassium:155, protein:18, carbs:0, sugar:0, fat:1, phosphorus:185 },
+  { id:'f028', name:'Peanut butter', portion:'2 tbsp (32g)', cal:188, sodium:147, potassium:179, protein:8, carbs:6, sugar:3, fat:16, phosphorus:107 },
+  { id:'f029', name:'Almond butter', portion:'1 tbsp (16g)', cal:98, sodium:36, potassium:121, protein:3, carbs:3, sugar:1, fat:9, phosphorus:82 },
+
+  // Vegetables
+  { id:'f030', name:'Broccoli, steamed', portion:'1 cup (91g)', cal:31, sodium:30, potassium:288, protein:3, carbs:6, sugar:2, fat:0, phosphorus:52 },
+  { id:'f031', name:'Spinach, raw', portion:'2 cups (60g)', cal:14, sodium:47, potassium:336, protein:2, carbs:2, sugar:0, fat:0, phosphorus:30 },
+  { id:'f032', name:'Green beans, cooked', portion:'1 cup (125g)', cal:44, sodium:4, potassium:209, protein:2, carbs:10, sugar:2, fat:0, phosphorus:30 },
+  { id:'f033', name:'Cauliflower, steamed', portion:'1 cup (100g)', cal:25, sodium:30, potassium:176, protein:2, carbs:5, sugar:2, fat:0, phosphorus:40 },
+  { id:'f034', name:'Cabbage, cooked', portion:'1 cup (150g)', cal:34, sodium:12, potassium:294, protein:2, carbs:8, sugar:4, fat:0, phosphorus:24 },
+  { id:'f035', name:'Carrots, raw', portion:'1 medium (61g)', cal:25, sodium:42, potassium:195, protein:1, carbs:6, sugar:3, fat:0, phosphorus:21 },
+  { id:'f036', name:'Tomato', portion:'1 medium (123g)', cal:22, sodium:6, potassium:292, protein:1, carbs:5, sugar:3, fat:0, phosphorus:29 },
+  { id:'f037', name:'Cucumber', portion:'1/2 cup sliced (52g)', cal:8, sodium:1, potassium:75, protein:0, carbs:2, sugar:1, fat:0, phosphorus:12 },
+  { id:'f038', name:'Bell pepper, red', portion:'1 medium (119g)', cal:37, sodium:5, potassium:251, protein:1, carbs:9, sugar:6, fat:0, phosphorus:31 },
+  { id:'f039', name:'Potato, baked with skin', portion:'1 medium (173g)', cal:161, sodium:17, potassium:926, protein:4, carbs:37, sugar:2, fat:0, phosphorus:120 },
+  { id:'f040', name:'Sweet potato, baked', portion:'1 medium (130g)', cal:112, sodium:72, potassium:438, protein:2, carbs:26, sugar:5, fat:0, phosphorus:54 },
+
+  // Grains / Carbs
+  { id:'f050', name:'Brown rice, cooked', portion:'1/2 cup (98g)', cal:108, sodium:5, potassium:42, protein:3, carbs:22, sugar:0, fat:1, phosphorus:80 },
+  { id:'f051', name:'White rice, cooked', portion:'1/2 cup (93g)', cal:103, sodium:1, potassium:27, protein:2, carbs:22, sugar:0, fat:0, phosphorus:37 },
+  { id:'f052', name:'Whole wheat pasta, cooked', portion:'1 cup (140g)', cal:174, sodium:4, potassium:62, protein:7, carbs:37, sugar:1, fat:1, phosphorus:124 },
+  { id:'f053', name:'Quinoa, cooked', portion:'1/2 cup (93g)', cal:111, sodium:9, potassium:160, protein:4, carbs:20, sugar:1, fat:2, phosphorus:152 },
+  { id:'f054', name:'Whole grain crackers', portion:'5 crackers (16g)', cal:71, sodium:120, potassium:46, protein:1, carbs:12, sugar:0, fat:2, phosphorus:35 },
+  { id:'f055', name:'White bread', portion:'1 slice (25g)', cal:67, sodium:132, potassium:25, protein:2, carbs:13, sugar:1, fat:1, phosphorus:27 },
+  { id:'f056', name:'Bagel, plain', portion:'1 medium (98g)', cal:270, sodium:430, potassium:105, protein:11, carbs:53, sugar:4, fat:2, phosphorus:95 },
+
+  // Salads / Mixed
+  { id:'f060', name:'Grilled chicken salad', portion:'1 bowl (~350g)', cal:280, sodium:620, potassium:580, protein:35, carbs:14, sugar:6, fat:9, phosphorus:300 },
+  { id:'f061', name:'Caesar salad (no dressing)', portion:'2 cups (85g)', cal:20, sodium:85, potassium:170, protein:1, carbs:3, sugar:1, fat:0, phosphorus:18 },
+  { id:'f062', name:'House salad with olive oil', portion:'1 large bowl (300g)', cal:180, sodium:250, potassium:420, protein:3, carbs:12, sugar:5, fat:13, phosphorus:60 },
+
+  // Dairy / Cheese
+  { id:'f070', name:'Low-fat cottage cheese', portion:'1/2 cup (113g)', cal:81, sodium:459, potassium:108, protein:14, carbs:3, sugar:3, fat:1, phosphorus:170 },
+  { id:'f071', name:'Cheddar cheese', portion:'1 oz (28g)', cal:113, sodium:185, potassium:28, protein:7, carbs:0, sugar:0, fat:9, phosphorus:145 },
+  { id:'f072', name:'Mozzarella (part skim)', portion:'1 oz (28g)', cal:72, sodium:175, potassium:21, protein:7, carbs:1, sugar:0, fat:5, phosphorus:135 },
+
+  // Soups / Processed (watch these)
+  { id:'f080', name:'Canned chicken noodle soup', portion:'1 cup (240ml)', cal:75, sodium:890, potassium:107, protein:6, carbs:9, sugar:1, fat:2, phosphorus:70 },
+  { id:'f081', name:'Tomato soup, canned', portion:'1 cup (244ml)', cal:90, sodium:870, potassium:470, protein:2, carbs:20, sugar:13, fat:0, phosphorus:44 },
+  { id:'f082', name:'Chicken broth, low sodium', portion:'1 cup (240ml)', cal:15, sodium:72, potassium:210, protein:3, carbs:1, sugar:0, fat:1, phosphorus:30 },
+
+  // Beverages
+  { id:'f090', name:'Water', portion:'1 cup (240ml)', cal:0, sodium:0, potassium:0, protein:0, carbs:0, sugar:0, fat:0, phosphorus:0 },
+  { id:'f091', name:'Orange juice', portion:'8 oz (240ml)', cal:112, sodium:0, potassium:496, protein:2, carbs:26, sugar:21, fat:0, phosphorus:42 },
+  { id:'f092', name:'Apple juice', portion:'8 oz (240ml)', cal:117, sodium:10, potassium:295, protein:0, carbs:29, sugar:28, fat:0, phosphorus:17 },
+  { id:'f093', name:'Coffee, black', portion:'8 oz (240ml)', cal:5, sodium:5, potassium:116, protein:0, carbs:0, sugar:0, fat:0, phosphorus:7 },
+  { id:'f094', name:'Green tea', portion:'8 oz (240ml)', cal:2, sodium:2, potassium:20, protein:0, carbs:0, sugar:0, fat:0, phosphorus:0 },
+  { id:'f095', name:'Diet soda', portion:'12 oz can (355ml)', cal:0, sodium:40, potassium:0, protein:0, carbs:0, sugar:0, fat:0, phosphorus:65 },
+  { id:'f096', name:'Whole milk latte', portion:'12 oz (355ml)', cal:170, sodium:135, potassium:420, protein:10, carbs:17, sugar:14, fat:7, phosphorus:260 },
+
+  // Snacks
+  { id:'f100', name:'Unsalted rice cakes', portion:'2 cakes (18g)', cal:70, sodium:5, potassium:15, protein:1, carbs:15, sugar:0, fat:1, phosphorus:30 },
+  { id:'f101', name:'Pretzels', portion:'1 oz (28g)', cal:108, sodium:385, potassium:42, protein:3, carbs:23, sugar:1, fat:1, phosphorus:34 },
+  { id:'f102', name:'Potato chips', portion:'1 oz (28g)', cal:149, sodium:168, potassium:361, protein:2, carbs:15, sugar:0, fat:10, phosphorus:44 },
+  { id:'f103', name:'Almonds, unsalted', portion:'1 oz (28g)', cal:164, sodium:0, potassium:200, protein:6, carbs:6, sugar:1, fat:14, phosphorus:136 },
+  { id:'f104', name:'Walnuts', portion:'1 oz (28g)', cal:185, sodium:1, potassium:125, protein:4, carbs:4, sugar:1, fat:18, phosphorus:98 },
+  { id:'f105', name:'Dark chocolate (70%)', portion:'1 oz (28g)', cal:170, sodium:6, potassium:200, protein:2, carbs:13, sugar:7, fat:12, phosphorus:75 },
+  { id:'f106', name:'Granola bar', portion:'1 bar (47g)', cal:193, sodium:147, potassium:145, protein:4, carbs:29, sugar:12, fat:8, phosphorus:93 },
+
+  // Common meals
+  { id:'f110', name:'Hamburger (fast food)', portion:'1 regular (102g)', cal:263, sodium:396, potassium:202, protein:13, carbs:28, sugar:6, fat:10, phosphorus:147 },
+  { id:'f111', name:'French fries (medium)', portion:'Medium (117g)', cal:365, sodium:246, potassium:677, protein:4, carbs:48, sugar:0, fat:17, phosphorus:102 },
+  { id:'f112', name:'Pizza, cheese slice', portion:'1 slice (107g)', cal:285, sodium:640, potassium:172, protein:12, carbs:36, sugar:4, fat:10, phosphorus:201 },
+  { id:'f113', name:'Soy sauce', portion:'1 tbsp (18g)', cal:11, sodium:879, potassium:31, protein:1, carbs:1, sugar:0, fat:0, phosphorus:20 },
+  { id:'f114', name:'Olive oil', portion:'1 tbsp (14g)', cal:119, sodium:0, potassium:0, protein:0, carbs:0, sugar:0, fat:14, phosphorus:0 },
+];
+
+const ACTIVITIES = {
+  walk:  { label:'Walking',            metFactor: 3.5 },
+  light: { label:'Light exercise',     metFactor: 2.5 },
+  bike:  { label:'Cycling',            metFactor: 6.0 },
+  swim:  { label:'Swimming',           metFactor: 7.0 },
+  chair: { label:'Chair exercises',    metFactor: 2.0 },
+  stairs:{ label:'Climbing stairs',    metFactor: 5.0 },
+  other: { label:'Other activity',     metFactor: 3.0 },
+};
+
+const ACT_ICONS = { walk:'🚶', light:'🤸', bike:'🚴', swim:'🏊', chair:'🪑', stairs:'🧗', other:'⚡' };
+
+// ══════════════════════════════════════════════════
+// STATE
+// ══════════════════════════════════════════════════
+let currentPid  = null;
+let currentDate = todayStr();
+let searchMeal  = 'Breakfast';
+let pendingFood = null;
+let selectedPortion = null;
+
+function todayStr() {
+  return new Date().toISOString().split('T')[0];
+}
+function dateKey(pid, date) { return 'sv_nutr_log_' + pid + '_' + date; }
+function actKey(pid, date)  { return 'sv_nutr_act_' + pid + '_' + date; }
+function nutrKey(pid)       { return 'sv_nutr_' + pid; }
+
+function getLog(pid, date) {
+  try { return JSON.parse(localStorage.getItem(dateKey(pid, date)) || 'null') || { breakfast:[], lunch:[], dinner:[], snacks:[] }; }
+  catch(e) { return { breakfast:[], lunch:[], dinner:[], snacks:[] }; }
+}
+function saveLog(pid, date, log) {
+  localStorage.setItem(dateKey(pid, date), JSON.stringify(log));
+}
+function getActs(pid, date) {
+  try { return JSON.parse(localStorage.getItem(actKey(pid, date)) || '[]'); }
+  catch(e) { return []; }
+}
+function saveActs(pid, date, acts) {
+  localStorage.setItem(actKey(pid, date), JSON.stringify(acts));
+}
+function getNutrPlan(pid) {
+  try { return JSON.parse(localStorage.getItem(nutrKey(pid)) || 'null'); } catch(e) { return null; }
+}
+
+// ══════════════════════════════════════════════════
+// LOGIN
+// ══════════════════════════════════════════════════
+function doLogin() {
+  const pid = document.getElementById('login-patient').value;
+  const pin = document.getElementById('login-pin').value;
+  if (!pid) { showToast('Please select your name'); return; }
+  if (pin !== '1234' && pin.length < 4) { showToast('Please enter your 4-digit PIN'); return; }
+  launchApp(pid);
+}
+function doDemo() {
+  const pid = document.getElementById('login-patient').value || 'P001';
+  launchApp(pid);
+}
+function launchApp(pid) {
+  currentPid  = pid;
+  currentDate = todayStr();
+  const p = PATIENTS[pid];
+  document.getElementById('topbar-name').textContent  = p.name.split(' ')[0];
+  document.getElementById('topbar-avatar').textContent = p.initials;
+  document.getElementById('s-login').classList.remove('active');
+  document.getElementById('s-app').classList.add('active');
+  renderDiary();
+}
+
+// ══════════════════════════════════════════════════
+// PAGE NAVIGATION
+// ══════════════════════════════════════════════════
+function showPage(name, btn) {
+  ['diary','activity','trends','profile'].forEach(p => {
+    document.getElementById('page-'+p).style.display = p === name ? '' : 'none';
+  });
+  document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  if (name === 'diary')    renderDiary();
+  if (name === 'activity') renderActivity();
+  if (name === 'trends')   renderTrends();
+  if (name === 'profile')  renderProfile();
+}
+
+// ══════════════════════════════════════════════════
+// TOTALS
+// ══════════════════════════════════════════════════
+function calcTotals(log) {
+  const t = { calories:0, sodium:0, potassium:0, protein:0, carbs:0, sugar:0, fat:0, phosphorus:0 };
+  ['breakfast','lunch','dinner','snacks'].forEach(meal => {
+    (log[meal] || []).forEach(item => {
+      const scale = item.grams / (item.baseGrams || 100);
+      t.calories   += Math.round((item.cal   || 0) * scale);
+      t.sodium     += Math.round((item.sodium || 0) * scale);
+      t.potassium  += Math.round((item.potassium || 0) * scale);
+      t.protein    += Math.round((item.protein || 0) * scale);
+      t.carbs      += Math.round((item.carbs   || 0) * scale);
+      t.sugar      += Math.round((item.sugar   || 0) * scale);
+      t.fat        += Math.round((item.fat     || 0) * scale);
+      t.phosphorus += Math.round((item.phosphorus || 0) * scale);
+    });
+  });
+  return t;
+}
+
+function getGoals(pid) {
+  const plan = getNutrPlan(pid);
+  const defaults = PATIENTS[pid].goals;
+  if (plan && plan.goals) {
+    const g = plan.goals;
+    return {
+      calories:   g.calories   || defaults.calories,
+      sodium:     g.sodium     || defaults.sodium,
+      potassium:  g.potassium  || defaults.potassium,
+      protein:    g.protein    || defaults.protein,
+      carbs:      g.carbs      || defaults.carbs,
+      sugar:      g.sugar      || defaults.sugar,
+      phosphorus: g.phosphorus || defaults.phosphorus,
+      fluid:      g.fluid      || defaults.fluid,
+    };
+  }
+  return defaults;
+}
+
+// ══════════════════════════════════════════════════
+// DIARY PAGE
+// ══════════════════════════════════════════════════
+function renderDiary() {
+  const log    = getLog(currentPid, currentDate);
+  const totals = calcTotals(log);
+  const goals  = getGoals(currentPid);
+  const p      = PATIENTS[currentPid];
+
+  // Build alerts
+  let alerts = '';
+  if (goals.sodium && totals.sodium > goals.sodium)
+    alerts += `<div class="alert-banner red">🚨 Sodium limit exceeded — ${totals.sodium}mg of ${goals.sodium}mg goal. Your care team will be notified.</div>`;
+  else if (goals.sodium && totals.sodium > goals.sodium * 0.85)
+    alerts += `<div class="alert-banner amber">⚠️ Approaching sodium limit — ${totals.sodium}mg of ${goals.sodium}mg. Watch dinner portions.</div>`;
+  if (goals.potassium && totals.potassium > goals.potassium)
+    alerts += `<div class="alert-banner red">🚨 Potassium limit exceeded — ${totals.potassium}mg of ${goals.potassium}mg goal.</div>`;
+  if (goals.sugar && totals.sugar > goals.sugar)
+    alerts += `<div class="alert-banner amber">⚠️ Daily sugar limit exceeded — ${totals.sugar}g of ${goals.sugar}g goal.</div>`;
+  if (totals.sodium === 0 && totals.calories === 0 && currentDate === todayStr())
+    alerts += `<div class="alert-banner teal">👋 Good morning! Log your first meal to start tracking today.</div>`;
+
+  // Macros
+  function macroCard(label, val, goal, unit, colorClass) {
+    const pct = goal ? Math.min(Math.round(val/goal*100), 100) : 0;
+    const over = goal && val > goal;
+    const warn = goal && val > goal * 0.85;
+    const fc   = over ? 'red' : warn ? 'amber' : 'teal';
+    return `<div class="macro-card">
+      <div class="macro-label">${label}</div>
+      <div class="macro-val${over?' over':warn?' warn':''}">${val.toLocaleString()}</div>
+      <div class="macro-unit">${unit}</div>
+      <div class="macro-goal">Goal: ${goal ? goal.toLocaleString() : '—'}</div>
+      ${goal ? `<div class="progress"><div class="progress-fill ${fc}" style="width:${pct}%"></div></div>` : ''}
+    </div>`;
+  }
+
+  // Meal sections
+  function mealRows(items, mealName) {
+    if (!items.length) return `<div style="font-size:13px;color:var(--muted);padding:8px 0">Nothing logged yet</div>`;
+    return items.map((item,i) => {
+      const scale = item.grams / (item.baseGrams || 100);
+      const cals  = Math.round((item.cal || 0) * scale);
+      const na    = Math.round((item.sodium || 0) * scale);
+      return `<div class="food-row">
+        <div style="flex:1">
+          <div class="food-name">${item.name}</div>
+          <div class="food-portion">${item.portionLabel || item.grams + 'g'} · ${na}mg Na · ${Math.round((item.potassium||0)*scale)}mg K</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:6px">
+          <div class="food-cals">${cals} cal</div>
+          <button class="food-del" style="color:var(--blue);font-size:14px" onclick="editFood('${mealName}',${i})" title="Edit portion">✏️</button>
+          <button class="food-del" onclick="removeFood('${mealName}',${i})" title="Remove">×</button>
+        </div>
+      </div>`;
+    }).join('');
+  }
+
+  // Date display
+  const dateDisp = currentDate === todayStr() ? 'Today'
+    : currentDate === new Date(Date.now()-86400000).toISOString().split('T')[0] ? 'Yesterday'
+    : new Date(currentDate+'T12:00:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});
+
+  document.getElementById('page-diary').innerHTML = `
+    <div class="date-nav">
+      <button class="date-nav-btn" onclick="changeDate(-1)">‹</button>
+      <div class="date-label">${dateDisp}</div>
+      <button class="date-nav-btn" onclick="changeDate(1)" ${currentDate >= todayStr() ? 'disabled style="opacity:0.3"' : ''}>›</button>
+      <button class="date-nav-btn" onclick="clearToday()" title="Clear today's log" style="font-size:13px;color:var(--muted)">🗑️</button>
+    </div>
+
+    ${alerts}
+
+    <div class="card">
+      <div class="card-title">Today's Totals</div>
+      <div class="macro-grid">
+        ${macroCard('Calories',    totals.calories,  goals.calories,  'kcal', 'teal')}
+        ${macroCard('Sodium',      totals.sodium,    goals.sodium,    'mg',   'amber')}
+        ${macroCard('Potassium',   totals.potassium, goals.potassium, 'mg',   'teal')}
+        ${macroCard('Protein',     totals.protein,   goals.protein,   'g',    'teal')}
+        ${macroCard('Carbs',       totals.carbs,     goals.carbs,     'g',    'teal')}
+        ${macroCard('Sugar',       totals.sugar,     goals.sugar,     'g',    'amber')}
+      </div>
+    </div>
+
+    ${['breakfast','lunch','dinner','snacks'].map(meal => `
+      <div class="card meal-section">
+        <div class="meal-header">
+          <span>${meal.charAt(0).toUpperCase()+meal.slice(1)}</span>
+          <button class="add-btn" onclick="openSearch('${meal}')">+ Add</button>
+        </div>
+        ${mealRows(log[meal], meal)}
+      </div>
+    `).join('')}
+
+    <div style="height:8px"></div>
+  `;
+}
+
+function changeDate(dir) {
+  const d = new Date(currentDate+'T12:00:00');
+  d.setDate(d.getDate() + dir);
+  const nd = d.toISOString().split('T')[0];
+  if (nd > todayStr()) return;
+  currentDate = nd;
+  renderDiary();
+}
+
+// ══════════════════════════════════════════════════
+// FOOD SEARCH
+// ══════════════════════════════════════════════════
+function openSearch(meal) {
+  searchMeal = meal;
+  document.getElementById('search-meal-label').textContent = 'Add to ' + meal.charAt(0).toUpperCase()+meal.slice(1);
+  document.getElementById('food-search-input').value = '';
+  document.getElementById('search-results').innerHTML = '<div style="text-align:center;padding:32px;color:var(--muted);font-size:14px">Start typing to search foods…</div>';
+  setSearchTab('search', document.querySelector('.tab-btn'));
+  document.getElementById('modal-search').classList.add('open');
+  setTimeout(() => document.getElementById('food-search-input').focus(), 200);
+}
+function closeSearch() { document.getElementById('modal-search').classList.remove('open'); }
+
+function setSearchTab(tab, btn) {
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('search-tab-search').style.display = tab === 'search' ? '' : 'none';
+  document.getElementById('search-tab-custom').style.display = tab === 'custom' ? '' : 'none';
+}
+
+function searchFoods(query) {
+  const q = query.toLowerCase().trim();
+  const el = document.getElementById('search-results');
+  if (q.length < 2) {
+    el.innerHTML = '<div style="text-align:center;padding:32px;color:var(--muted);font-size:14px">Type at least 2 characters…</div>';
+    return;
+  }
+  const results = FOOD_DB.filter(f => f.name.toLowerCase().includes(q)).slice(0, 15);
+  if (!results.length) {
+    el.innerHTML = `<div style="text-align:center;padding:24px;color:var(--muted);font-size:14px">No results for "${query}"<br><span style="font-size:12px">Try the Custom tab to add it manually</span></div>`;
+    return;
+  }
+  el.innerHTML = results.map(f => `
+    <div class="food-result" onclick="selectFood('${f.id}')" style="cursor:pointer">
+      <div style="flex:1">
+        <div class="food-result-name">${f.name}</div>
+        <div class="food-result-detail">${f.portion} · ${f.sodium}mg Na · ${f.potassium||0}mg K · ${f.protein}g prot</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <div class="food-result-cals">${f.cal} cal</div>
+        <span style="font-size:18px;color:var(--teal);font-weight:700">›</span>
+      </div>
+    </div>
+  `).join('');
+}
+
+
+// ══════════════════════════════════════════════════
+// FOOD FLAG / AVOID CHECKER
+// ══════════════════════════════════════════════════
+
+// Per-condition built-in avoid rules (fallback if no nurse plan saved)
+const CONDITION_AVOID = {
+  'CKD': [
+    { keywords:['banana','bananas'],
+      reason:'Very high potassium (422mg per banana). With CKD, your kidneys cannot remove excess potassium, which can cause dangerous heart rhythm problems.',
+      clinical:'CKD potassium limit is typically 2,000–3,000mg/day. One banana uses about 15% of that limit.' },
+    { keywords:['orange','orange juice'],
+      reason:'High potassium fruit. One orange has ~237mg potassium — a significant load for CKD patients.',
+      clinical:'Choose lower-potassium fruits like apples, blueberries, or grapes instead.' },
+    { keywords:['potato','french fries'],
+      reason:'Very high potassium (926mg per baked potato). One potato can use a third of your daily potassium limit.',
+      clinical:'Tip: boiling and draining potatoes removes up to 50% of the potassium.' },
+    { keywords:['tomato','tomato soup','tomato sauce'],
+      reason:'High potassium (292mg per tomato). Avoid tomato-based sauces, juices, and soups.',
+      clinical:'Small amounts may be acceptable — ask your nurse about your specific limit.' },
+    { keywords:['milk','yogurt'],
+      reason:'High phosphorus. Dairy products are hard for damaged kidneys to process, leading to bone disease over time.',
+      clinical:'Phosphorus goal for CKD: typically <800mg/day. One cup of milk has ~205mg phosphorus.' },
+    { keywords:['nuts','almonds','walnuts','peanut butter'],
+      reason:'High in both phosphorus and potassium — both restricted on a CKD diet.',
+      clinical:'Small occasional portions may be acceptable. Discuss with your dietitian.' },
+    { keywords:['cola','dark soda','root beer','dr pepper'],
+      reason:'Dark sodas contain phosphoric acid which rapidly raises blood phosphorus.',
+      clinical:'Even diet dark sodas are high in phosphorus. Choose water, ginger ale, or lemon water.' },
+    { keywords:['chips','potato chips'],
+      reason:'High potassium (from potato) and high sodium — a double concern for CKD patients.',
+      clinical:'Choose unsalted rice cakes or pretzels in small amounts as a lower-potassium snack.' },
+  ],
+  'CHF': [
+    { keywords:['canned soup','chicken noodle soup','tomato soup'],
+      reason:'Canned soups are extremely high in sodium — one cup can have 800–900mg, more than half your daily CHF limit.',
+      clinical:'CHF sodium limit: 1,500mg/day. High sodium causes fluid retention and worsens breathlessness.' },
+    { keywords:['deli turkey','lunch meat','ham','salami'],
+      reason:'Deli meats are heavily salted as a preservative. Even "low sodium" options often have 300–400mg per serving.',
+      clinical:'Choose freshly cooked meats instead. Ask for no-salt preparations when possible.' },
+    { keywords:['soy sauce','teriyaki','fish sauce'],
+      reason:'Extremely high sodium — one tablespoon of soy sauce has ~879mg, more than half your daily CHF sodium limit.',
+      clinical:'Use herbs, garlic, lemon juice, and spices to flavor food instead.' },
+    { keywords:['pretzels','crackers'],
+      reason:'Salty snacks add significant sodium quickly. One ounce of pretzels has ~385mg sodium.',
+      clinical:'Choose unsalted rice cakes or fresh vegetables as snacks instead.' },
+    { keywords:['pickle'],
+      reason:'Pickles are cured in salt brine — extremely high sodium, often 700–900mg per serving.',
+      clinical:'Avoid all pickled foods on a heart failure diet.' },
+    { keywords:['chips','potato chips'],
+      reason:'High in sodium and calories. Processed snacks are among the top contributors to excess sodium intake.',
+      clinical:'Unsalted air-popped popcorn or fresh veggies are better alternatives.' },
+  ],
+  'Diabetes': [
+    { keywords:['orange juice','apple juice','grape juice'],
+      reason:'Fruit juices spike blood sugar rapidly — the fiber that slows sugar absorption has been removed.',
+      clinical:'8oz orange juice has 26g carbs and 21g sugar. Choose whole fruit in small portions instead.' },
+    { keywords:['regular soda','cola','sprite','lemonade'],
+      reason:'Sugary beverages cause immediate blood sugar spikes with no nutritional benefit.',
+      clinical:'One regular soda has ~39g sugar. Choose water, sparkling water, or diet beverages.' },
+    { keywords:['white bread','bagel'],
+      reason:'Refined carbohydrates digest quickly and spike blood glucose. High glycemic index foods worsen diabetes control.',
+      clinical:'Choose whole grain alternatives — they have more fiber and a lower glycemic index.' },
+    { keywords:['granola bar','granola'],
+      reason:'Granola bars are often high in added sugars despite appearing healthy. One bar averages 12g sugar.',
+      clinical:'Look for options with <5g sugar and >3g fiber. Read labels carefully.' },
+    { keywords:['french fries','potato chips'],
+      reason:'High in refined carbs and fat — french fries cause rapid blood sugar spikes.',
+      clinical:'Choose non-starchy vegetables like broccoli, peppers, or cucumbers as snacks.' },
+    { keywords:['white rice'],
+      reason:'White rice has a high glycemic index and raises blood sugar faster than brown rice or quinoa.',
+      clinical:'Choose brown rice, cauliflower rice, or quinoa as lower-glycemic alternatives.' },
+  ],
+  'HTN': [
+    { keywords:['potato chips','chips'],
+      reason:'High-sodium snacks significantly raise blood pressure.',
+      clinical:'HTN sodium limit: 1,500–2,300mg/day. Choose unsalted nuts or fresh veggies instead.' },
+    { keywords:['soy sauce','fish sauce'],
+      reason:'Extremely high sodium — a single tablespoon contains more sodium than many full meals should.',
+      clinical:'Use herbs, citrus, vinegar, and spices to add flavor without sodium.' },
+    { keywords:['canned soup','tomato soup','chicken noodle soup'],
+      reason:'Canned soups are one of the leading sources of excess sodium in the American diet.',
+      clinical:'Choose low-sodium or no-salt-added versions, or make soups from scratch at home.' },
+    { keywords:['hamburger','burger'],
+      reason:'Fast food burgers are very high in sodium, saturated fat, and calories — all worsen hypertension.',
+      clinical:'If eating out, choose grilled options, skip added salt, and ask for sauces on the side.' },
+    { keywords:['pretzels','salami','deli turkey'],
+      reason:'Processed and cured foods are heavily salted to preserve them.',
+      clinical:'Read labels. Look for "no salt added" or "low sodium" versions.' },
+  ],
+  'COPD': [
+    { keywords:['soda','sparkling water','carbonated'],
+      reason:'Carbonated drinks can cause bloating and abdominal distension, which pushes up against the diaphragm and makes breathing harder.',
+      clinical:'Choose still water or herbal teas. Even sparkling water can worsen breathlessness in COPD.' },
+    { keywords:['fried','french fries','fried chicken'],
+      reason:'Fried foods are high in saturated fat and can cause bloating and reflux, both of which worsen COPD breathing symptoms.',
+      clinical:'Choose baked, grilled, or steamed options instead.' },
+    { keywords:['cruciferous','broccoli','cauliflower','cabbage','brussels'],
+      reason:'These vegetables, while nutritious, produce gas during digestion which can cause bloating and increased breathing difficulty.',
+      clinical:'Cook them well to reduce gas production, or eat in small portions. Do not eliminate entirely — they are nutritious.' },
+    { keywords:['beans','lentils','chickpeas'],
+      reason:'Legumes are gas-producing foods that can cause abdominal bloating, pressing on the diaphragm and worsening shortness of breath.',
+      clinical:'Soak dried beans overnight and drain cooking water to reduce gas. Canned beans rinsed well are a better option.' },
+    { keywords:['chips','processed snack','salty snack'],
+      reason:'High-sodium processed snacks cause fluid retention which can worsen breathing difficulty.',
+      clinical:'COPD patients benefit from a moderate sodium diet. Choose fresh foods when possible.' },
+    { keywords:['alcohol','beer','wine'],
+      reason:'Alcohol can interact with COPD medications and suppress the respiratory drive, worsening oxygen levels.',
+      clinical:'Discuss any alcohol use with your care team. Even small amounts may affect breathing and medication effectiveness.' },
+  ],
+};;
+
+
+function getAvoidRules(pid) {
+  const p    = PATIENTS[pid];
+  const plan = getNutrPlan(pid);
+  const rules = [];
+
+  // Built-in condition-based rules
+  (p.conditions || []).forEach(cond => {
+    (CONDITION_AVOID[cond] || []).forEach(rule => rules.push({ ...rule, source: cond }));
+  });
+
+  // Patient default avoid list (built into PATIENTS object, shown when no nurse plan)
+  const defaultAvoid = p.avoid || '';
+  if (defaultAvoid) {
+    defaultAvoid.split(/[,;]+/).map(s => s.trim().toLowerCase()).filter(Boolean).forEach(item => {
+      const foodName = item.replace(/\(.*?\)/g, '').trim();
+      if (foodName.length > 2) {
+        rules.push({
+          keywords: [foodName],
+          reason: 'Your care team recommends avoiding "' + foodName + '" based on your conditions.',
+          clinical: 'This is part of your standard dietary guidelines. Ask your nurse for more details.',
+          source: 'Condition Guidelines',
+          custom: false,
+        });
+      }
+    });
+  }
+
+  // Nurse-set custom avoid list (from plan.goals.avoid string)
+  if (plan && plan.goals && plan.goals.avoid) {
+    const avoidItems = plan.goals.avoid.split(/[,;]+/).map(s => s.trim().toLowerCase()).filter(Boolean);
+    avoidItems.forEach(item => {
+      // Extract the food name (before any parenthetical explanation)
+      const foodName = item.replace(/\(.*?\)/g, '').trim();
+      const explanation = item.match(/\(([^)]+)\)/)?.[1] || '';
+      rules.push({
+        keywords: [foodName],
+        reason: `Your nurse or dietitian flagged "${foodName}" for your personal care plan.` + (explanation ? ' Reason: ' + explanation + '.' : ''),
+        clinical: 'This was set specifically for your conditions by your care team. Contact your nurse if you have questions.',
+        source: 'Nurse Plan',
+        custom: true,
+      });
+    });
+  }
+
+  return rules;
+}
+
+function checkFoodAgainstRules(foodName, pid) {
+  // Returns the first matching rule, or null
+  const rules = getAvoidRules(pid);
+  const name  = foodName.toLowerCase();
+  const words = name.split(/\s+/);
+  for (const rule of rules) {
+    for (const kw of rule.keywords) {
+      // Match if food name contains the keyword phrase
+      if (name.includes(kw)) return rule;
+      // OR if keyword is a single word and any word in the food name matches it exactly
+      if (!kw.includes(' ') && words.includes(kw)) return rule;
+      // OR if keyword is plural/singular variant (banana/bananas)
+      if (name.includes(kw.replace(/s$/, '')) || kw.replace(/s$/, '').length > 3 && words.some(w => w.startsWith(kw.replace(/s$/, '')))) return rule;
+    }
+  }
+  return null;
+}
+
+let _flagRule = null;
+
+function showFlagModal(food, rule) {
+  _flagRule = rule;
+  document.getElementById('flag-food-name').textContent = food.name;
+  document.getElementById('flag-reason').innerHTML =
+    '<strong>Why this is flagged:</strong><br>' + rule.reason;
+  const clinEl = document.getElementById('flag-clinical-note');
+  if (rule.clinical) {
+    clinEl.innerHTML = '💡 <strong>Clinical note:</strong> ' + rule.clinical;
+    clinEl.style.display = '';
+  } else {
+    clinEl.style.display = 'none';
+  }
+  document.getElementById('modal-flag').classList.add('open');
+}
+
+function closeFlagModal() {
+  document.getElementById('modal-flag').classList.remove('open');
+  _flagRule = null;
+  pendingFood = null;
+  selectedPortion = null;
+}
+
+function overrideFlagAndAdd() {
+  document.getElementById('modal-flag').classList.remove('open');
+  _flagRule = null;
+  // Proceed to portion selection
+  if (pendingFood) openPortion(pendingFood);
+}
+
+
+function quickAddFood(fid) {
+  // Add food at its default listed portion size instantly, no modal
+  const food = FOOD_DB.find(f => f.id === fid);
+  if (!food) return;
+  // Check flag first
+  const rule = checkFoodAgainstRules(food.name, currentPid);
+  if (rule) {
+    pendingFood = food;
+    showFlagModal(food, rule);
+    return;
+  }
+  // Parse default grams from portion string
+  const match = (food.portion || '').match(/\((\d+)g\)/);
+  const grams = match ? parseInt(match[1]) : 100;
+  const log = getLog(currentPid, currentDate);
+  const entry = { ...food, grams, baseGrams:100, portionLabel:food.portion||grams+'g', addedAt:new Date().toISOString() };
+  if (!log[searchMeal]) log[searchMeal] = [];
+  log[searchMeal].push(entry);
+  saveLog(currentPid, currentDate, log);
+  closeSearch();
+  renderDiary();
+  checkAlerts(log);
+  showToast('Added ' + food.name + ' (' + (food.portion||grams+'g') + ')');
+}
+
+function selectFood(fid) {
+  pendingFood = FOOD_DB.find(f => f.id === fid);
+  if (!pendingFood) return;
+  document.getElementById('modal-search').classList.remove('open');
+  // Check if food is flagged for this patient
+  const rule = checkFoodAgainstRules(pendingFood.name, currentPid);
+  if (rule) {
+    showFlagModal(pendingFood, rule);
+  } else {
+    openPortion(pendingFood);
+  }
+}
+
+// ── PORTION MODAL ──
+function openPortion(food) { openPortionModal(food, false); }
+
+
+// ══════════════════════════════════════════════════
+// SMART PORTION SYSTEM — Servings / Grams / Ounces
+// ══════════════════════════════════════════════════
+
+let _portionTab    = 'servings';   // current tab
+let _servingGrams  = 100;          // grams per 1 serving (parsed from food.portion)
+let _servingCount  = 1;            // number of servings
+let _servingName   = 'serving';    // e.g. "slice", "cup", "piece"
+let _currentGrams  = 100;          // the final gram value used for nutrients
+
+const OZ_TO_G = 28.3495;
+
+function parsePortion(food) {
+  // Parse portion string like "1 slice (43g)", "1/2 cup (98g)", "3 oz (85g)", "1 medium (118g)"
+  const str = food.portion || '';
+  const gMatch = str.match(/\((\d+)g\)/);
+  const grams  = gMatch ? parseInt(gMatch[1]) : 100;
+
+  // Extract the human label (before the parenthesis)
+  let label = str.split('(')[0].trim();
+  // Remove leading numbers and fractions to get the unit name
+  // e.g. "1 slice" → "slice", "1/2 cup" → "cup", "3 oz" → "oz", "1 medium" → "piece"
+  const unitMatch = label.match(/^[\d\/\s]+(.+)$/);
+  const unitName  = unitMatch ? unitMatch[1].trim() : 'serving';
+  // Extract the quantity from the label
+  let qty = 1;
+  const qtyMatch = label.match(/^([\d]+(?:\/[\d]+)?)/);
+  if (qtyMatch) {
+    const parts = qtyMatch[1].split('/');
+    qty = parts.length === 2 ? parseInt(parts[0]) / parseInt(parts[1]) : parseInt(parts[0]);
+  }
+
+  return { grams, label, unitName, qty, gramsPerUnit: grams / qty };
+}
+
+function setPortionTab(tab) {
+  _portionTab = tab;
+  ['servings','grams','oz'].forEach(t => {
+    document.getElementById('ptab-content-' + t).style.display = t === tab ? '' : 'none';
+    const btn = document.getElementById('ptab-' + t);
+    if (btn) { if (t === tab) btn.classList.add('active'); else btn.classList.remove('active'); }
+  });
+  updatePortionPreview();
+}
+
+function openPortionModal(food, isEdit) {
+  if (!food) return;
+  pendingFood = food;
+  selectedPortion = null;
+
+  const parsed      = parsePortion(food);
+  _servingGrams     = parsed.gramsPerUnit;
+  _servingName      = parsed.unitName;
+  _servingCount     = isEdit ? (food.grams / _servingGrams) : parsed.qty;
+  _servingCount     = Math.round(_servingCount * 4) / 4; // round to nearest 0.25
+  if (_servingCount < 0.5) _servingCount = 0.5;
+  _currentGrams     = Math.round(_servingCount * _servingGrams);
+  _portionTab       = 'servings';
+
+  // Set food name + reset tab
+  document.getElementById('portion-food-name').textContent = food.name;
+  document.getElementById('portion-food-detail').textContent =
+    parsed.label + ' · ' + parsed.grams + 'g per ' + parsed.qty + ' ' + parsed.unitName;
+
+  // Serving tab setup
+  document.getElementById('serving-unit-label').textContent =
+    '1 ' + parsed.unitName + ' = ' + Math.round(parsed.gramsPerUnit) + 'g';
+  document.getElementById('serving-unit-name').textContent = _servingName;
+  document.getElementById('serving-count').textContent = formatQty(_servingCount);
+
+  // Quick serving buttons: 0.5, 1, 1.5, 2, 2.5, 3
+  const quickServings = [0.5, 1, 1.5, 2, 2.5, 3, 4];
+  document.getElementById('quick-serving-btns').innerHTML = quickServings.map(q => {
+    const g   = Math.round(q * _servingGrams);
+    const cal = Math.round(food.cal * g / 100);
+    return `<button onclick="setServings(${q})"
+      style="padding:6px 10px;border-radius:7px;border:1.5px solid var(--border);background:var(--card);
+             font-size:12px;cursor:pointer;font-family:inherit;color:var(--navy);font-weight:500">
+      ${formatQty(q)}<br><span style="font-size:10px;color:var(--muted)">${cal} cal</span>
+    </button>`;
+  }).join('');
+
+  // Gram tab setup
+  document.getElementById('gram-input').value = _currentGrams;
+  const quickGrams = [28,50,85,100,150,200,250,300];
+  document.getElementById('gram-quick-btns').innerHTML = quickGrams.map(g => {
+    const cal = Math.round(food.cal * g / 100);
+    return `<button onclick="setGrams(${g})"
+      style="padding:5px 9px;border-radius:6px;border:1.5px solid var(--border);background:var(--card);
+             font-size:11px;cursor:pointer;font-family:inherit;color:var(--navy)">
+      ${g}g<br><span style="font-size:10px;color:var(--muted)">${cal} cal</span>
+    </button>`;
+  }).join('');
+
+  // Oz tab setup
+  const ozVal = Math.round(_currentGrams / OZ_TO_G * 4) / 4;
+  document.getElementById('oz-input').value = ozVal;
+  const quickOz = [0.5, 1, 2, 3, 3.5, 4, 6, 8];
+  document.getElementById('oz-quick-btns').innerHTML = quickOz.map(oz => {
+    const g   = Math.round(oz * OZ_TO_G);
+    const cal = Math.round(food.cal * g / 100);
+    return `<button onclick="setOz(${oz})"
+      style="padding:5px 9px;border-radius:6px;border:1.5px solid var(--border);background:var(--card);
+             font-size:11px;cursor:pointer;font-family:inherit;color:var(--navy)">
+      ${oz} oz<br><span style="font-size:10px;color:var(--muted)">${cal} cal</span>
+    </button>`;
+  }).join('');
+
+  // Reset to servings tab
+  setPortionTab('servings');
+
+  // Confirm button label
+  const confirmBtn = document.getElementById('portion-confirm-btn');
+  if (confirmBtn) confirmBtn.textContent = isEdit ? '✓ Update Portion' : '✓ Save to Log';
+
+  document.getElementById('modal-portion').classList.add('open');
+  updatePortionPreview();
+}
+
+function formatQty(n) {
+  if (n === 0.5)  return '½';
+  if (n === 0.25) return '¼';
+  if (n === 0.75) return '¾';
+  if (n === 1.5)  return '1½';
+  if (n === 2.5)  return '2½';
+  if (n === 3.5)  return '3½';
+  if (Number.isInteger(n)) return String(n);
+  return n.toFixed(2).replace(/\.?0+$/, '');
+}
+
+// ── Serving controls ──
+function changeServings(delta) {
+  _servingCount = Math.max(0.5, Math.round((_servingCount + delta) * 4) / 4);
+  _currentGrams = Math.round(_servingCount * _servingGrams);
+  document.getElementById('serving-count').textContent = formatQty(_servingCount);
+  document.getElementById('gram-input').value = _currentGrams;
+  document.getElementById('oz-input').value   = Math.round(_currentGrams / OZ_TO_G * 4) / 4;
+  updatePortionPreview();
+}
+
+function setServings(qty) {
+  _servingCount = qty;
+  _currentGrams = Math.round(qty * _servingGrams);
+  document.getElementById('serving-count').textContent = formatQty(_servingCount);
+  document.getElementById('gram-input').value = _currentGrams;
+  document.getElementById('oz-input').value   = Math.round(_currentGrams / OZ_TO_G * 4) / 4;
+  updatePortionPreview();
+}
+
+// ── Gram controls ──
+function nudgeGrams(delta) {
+  const current = parseInt(document.getElementById('gram-input').value) || 100;
+  setGrams(Math.max(1, current + delta));
+}
+
+function setGrams(g) {
+  _currentGrams = g;
+  _servingCount = Math.round((g / _servingGrams) * 4) / 4;
+  document.getElementById('gram-input').value  = g;
+  document.getElementById('serving-count').textContent = formatQty(_servingCount);
+  document.getElementById('oz-input').value    = Math.round(g / OZ_TO_G * 4) / 4;
+  updatePortionPreview();
+}
+
+function onGramInput() {
+  const g = parseInt(document.getElementById('gram-input').value) || 0;
+  if (g > 0) setGrams(g);
+}
+
+// ── Ounce controls ──
+function nudgeOz(delta) {
+  const current = parseFloat(document.getElementById('oz-input').value) || 3.5;
+  setOz(Math.max(0.5, Math.round((current + delta) * 4) / 4));
+}
+
+function setOz(oz) {
+  const g = Math.round(oz * OZ_TO_G);
+  _currentGrams = g;
+  _servingCount = Math.round((g / _servingGrams) * 4) / 4;
+  document.getElementById('oz-input').value   = oz;
+  document.getElementById('gram-input').value = g;
+  document.getElementById('serving-count').textContent = formatQty(_servingCount);
+  updatePortionPreview();
+}
+
+function onOzInput() {
+  const oz = parseFloat(document.getElementById('oz-input').value) || 0;
+  if (oz > 0) setOz(oz);
+}
+
+// ── Live preview bar ──
+function updatePortionPreview() {
+  if (!pendingFood) return;
+  const g     = _currentGrams || 1;
+  const base  = pendingFood.baseGrams || 100;
+  const scale = g / base;
+  const set   = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = Math.round(val); };
+  set('prev-cal', (pendingFood.cal        || 0) * scale);
+  set('prev-na',  (pendingFood.sodium     || 0) * scale);
+  set('prev-k',   (pendingFood.potassium  || 0) * scale);
+  set('prev-pro', (pendingFood.protein    || 0) * scale);
+
+  // Build the portion label for saving
+  const unitLabel = _portionTab === 'oz'
+    ? (Math.round(_currentGrams / OZ_TO_G * 4) / 4) + ' oz'
+    : _portionTab === 'grams'
+    ? _currentGrams + 'g'
+    : formatQty(_servingCount) + ' ' + _servingName;
+
+  selectedPortion = { grams: _currentGrams, label: unitLabel };
+}
+
+function selectPortion(btn, grams, label) {
+  document.querySelectorAll('.portion-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  selectedPortion = { grams, label };
+  // Update the detail line with live calorie count
+  if (pendingFood) {
+    const scale = grams / (pendingFood.baseGrams || 100);
+    const cal  = Math.round((pendingFood.cal   || 0) * scale);
+    const na   = Math.round((pendingFood.sodium || 0) * scale);
+    const k    = Math.round((pendingFood.potassium || 0) * scale);
+    const det  = document.getElementById('portion-food-detail');
+    if (det) det.textContent = cal + ' cal · ' + na + 'mg sodium · ' + k + 'mg potassium · ' + grams + 'g';
+  }
+}
+
+// addWithCustomPortion replaced by new portion system
+
+function closePortion() {
+  document.getElementById('modal-portion').classList.remove('open');
+  pendingFood = null;
+  _editMeal  = null;
+  _editIndex = null;
+}
+
+document.getElementById('modal-portion').addEventListener('click', e => {
+  if (e.target === document.getElementById('modal-portion')) closePortion();
+});
+
+// Also listen for "Add" tap on portion sheet
+
+
+function confirmAddFood() {
+  if (!pendingFood || !selectedPortion) return;
+  const log = getLog(currentPid, currentDate);
+  const entry = {
+    ...pendingFood,
+    grams: selectedPortion.grams,
+    baseGrams: pendingFood.baseGrams || 100,
+    portionLabel: selectedPortion.label,
+    addedAt: new Date().toISOString(),
+  };
+  if (_editMeal !== null && _editIndex !== null) {
+    // EDIT MODE — replace existing entry
+    if (!log[_editMeal]) log[_editMeal] = [];
+    log[_editMeal][_editIndex] = entry;
+    saveLog(currentPid, currentDate, log);
+    closePortion();
+    renderDiary();
+    checkAlerts(log);
+    showToast('Updated ' + pendingFood.name);
+    _editMeal = null; _editIndex = null;
+  } else {
+    // ADD MODE — push new entry
+    if (!log[searchMeal]) log[searchMeal] = [];
+    log[searchMeal].push(entry);
+    saveLog(currentPid, currentDate, log);
+    closePortion();
+    renderDiary();
+    checkAlerts(log);
+    showToast('Added ' + pendingFood.name);
+  }
+  pendingFood = null;
+  selectedPortion = null;
+}
+
+function addCustomFood() {
+  const name = document.getElementById('c-name').value.trim();
+  const cal  = parseFloat(document.getElementById('c-cal').value) || 0;
+  if (!name || !cal) { showToast('Food name and calories are required'); return; }
+  // Check flag for custom food too
+  const rule = checkFoodAgainstRules(name, currentPid);
+  if (rule) {
+    // For custom food we flag but still allow — show inline warning
+    const proceed = confirm('⚠️ Food Flag: ' + name + '\n\n' + rule.reason + '\n\nAdd anyway?');
+    if (!proceed) return;
+  }
+  const entry = {
+    id: 'custom_' + Date.now(),
+    name, cal,
+    sodium:     parseFloat(document.getElementById('c-sodium').value)    || 0,
+    protein:    parseFloat(document.getElementById('c-protein').value)   || 0,
+    carbs:      parseFloat(document.getElementById('c-carbs').value)     || 0,
+    potassium:  parseFloat(document.getElementById('c-potassium').value) || 0,
+    sugar:      parseFloat(document.getElementById('c-sugar').value)     || 0,
+    fat:        parseFloat(document.getElementById('c-fat').value)       || 0,
+    phosphorus: 0,
+    grams: 100, baseGrams: 100,
+    portionLabel: '1 serving',
+    addedAt: new Date().toISOString(),
+  };
+  const log = getLog(currentPid, currentDate);
+  if (!log[searchMeal]) log[searchMeal] = [];
+  log[searchMeal].push(entry);
+  saveLog(currentPid, currentDate, log);
+  closeSearch();
+  renderDiary();
+  showToast('Added ' + name);
+}
+
+
+// ══════════════════════════════════════════════════
+// EDIT FOOD PORTION
+// ══════════════════════════════════════════════════
+let _editMeal  = null;
+let _editIndex = null;
+
+function editFood(meal, idx) {
+  const log  = getLog(currentPid, currentDate);
+  const item = log[meal][idx];
+  if (!item) return;
+  _editMeal  = meal;
+  _editIndex = idx;
+  searchMeal = meal;
+  // Pre-load the item as pendingFood
+  pendingFood = item;
+  // Open portion modal with current portion pre-selected
+  openPortionForEdit(item);
+}
+
+function openPortionForEdit(item) { openPortionModal(item, true); }
+
+// ── CLEAR ALL DATA ──
+function clearAllData() {
+  const keys = [];
+  for (let i = 0; i < localStorage.length; i++) {
+    const k = localStorage.key(i);
+    if (k && (k.startsWith('sv_nutr_log_') || k.startsWith('sv_nutr_act_'))) {
+      keys.push(k);
+    }
+  }
+  if (keys.length === 0) { showToast('No food log data to clear'); return; }
+  if (!confirm('Clear all ' + keys.length + ' days of food and activity data?\n\nNutrition plans set by your nurse will NOT be deleted.')) return;
+  keys.forEach(k => localStorage.removeItem(k));
+  showToast('✓ All food log data cleared');
+  if (currentPid) renderDiary();
+}
+
+// ── CLEAR TODAY ──
+function clearToday() {
+  if (!confirm('Clear all food logged for today?')) return;
+  localStorage.removeItem(dateKey(currentPid, currentDate));
+  localStorage.removeItem(actKey(currentPid, currentDate));
+  renderDiary();
+  showToast('Today\'s log cleared');
+}
+
+
+function removeFood(meal, idx) {
+  const log = getLog(currentPid, currentDate);
+  log[meal].splice(idx, 1);
+  saveLog(currentPid, currentDate, log);
+  renderDiary();
+}
+
+// ── ALERTS ──
+function checkAlerts(log) {
+  const totals = calcTotals(log);
+  const goals  = getGoals(currentPid);
+  const p      = PATIENTS[currentPid];
+  if (!p) return;
+
+  const alerts = [];
+
+  if (goals.sodium && totals.sodium > goals.sodium) {
+    alerts.push({ type:'sodium_exceeded', severity:'high',
+      msg: 'Sodium ' + totals.sodium + 'mg exceeded ' + goals.sodium + 'mg limit',
+      value: totals.sodium, limit: goals.sodium });
+    showToast('⚠️ Sodium limit exceeded — your nurse has been notified');
+  } else if (goals.sodium && totals.sodium > goals.sodium * 0.9) {
+    showToast('⚠️ Approaching sodium limit — ' + totals.sodium + 'mg of ' + goals.sodium + 'mg');
+  }
+
+  if (goals.potassium && totals.potassium > goals.potassium) {
+    alerts.push({ type:'potassium_exceeded', severity:'high',
+      msg: 'Potassium ' + totals.potassium + 'mg exceeded ' + goals.potassium + 'mg limit',
+      value: totals.potassium, limit: goals.potassium });
+    showToast('🚨 Potassium limit exceeded — your nurse has been notified');
+  }
+
+  if (goals.sugar && totals.sugar > goals.sugar) {
+    alerts.push({ type:'sugar_exceeded', severity:'medium',
+      msg: 'Sugar ' + totals.sugar + 'g exceeded ' + goals.sugar + 'g limit',
+      value: totals.sugar, limit: goals.sugar });
+  }
+
+  if (goals.calories && totals.calories > goals.calories * 1.15) {
+    alerts.push({ type:'calorie_exceeded', severity:'low',
+      msg: 'Calories ' + totals.calories + ' exceeded ' + goals.calories + ' goal by 15%+',
+      value: totals.calories, limit: goals.calories });
+  }
+
+  // Write alerts to localStorage where RPM can read them
+  if (alerts.length > 0) {
+    const key = 'sv_nutr_alert_' + currentPid;
+    let existing = [];
+    try { existing = JSON.parse(localStorage.getItem(key) || '[]'); } catch(e) {}
+    const now = new Date().toISOString();
+    alerts.forEach(a => {
+      existing.unshift({
+        ...a, pid: currentPid, patientName: p.name,
+        date: currentDate, ts: now, read: false
+      });
+    });
+    // Keep last 50 alerts per patient
+    existing = existing.slice(0, 50);
+    localStorage.setItem(key, JSON.stringify(existing));
+  }
+}
+
+// ══════════════════════════════════════════════════
+// ACTIVITY PAGE
+// ══════════════════════════════════════════════════
+function renderActivity() {
+  const acts  = getActs(currentPid, currentDate);
+  const totalSteps = acts.reduce((s,a) => s + (a.steps||0), 0);
+  const totalMins  = acts.reduce((s,a) => s + (a.duration||0), 0);
+  const totalCals  = acts.reduce((s,a) => s + (a.calBurned||0), 0);
+  const stepGoal   = 4000;
+  const stepPct    = Math.min(Math.round(totalSteps/stepGoal*100), 100);
+
+  const dateDisp = currentDate === todayStr() ? 'Today'
+    : new Date(currentDate+'T12:00:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});
+
+  document.getElementById('page-activity').innerHTML = `
+    <div class="date-nav">
+      <button class="date-nav-btn" onclick="changeDate(-1)">‹</button>
+      <div class="date-label">${dateDisp}</div>
+      <button class="date-nav-btn" onclick="changeDate(1)" ${currentDate >= todayStr() ? 'disabled style="opacity:0.3"' : ''}>›</button>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Activity Summary</div>
+      <div class="macro-grid">
+        <div class="macro-card">
+          <div class="macro-label">Steps</div>
+          <div class="macro-val${totalSteps >= stepGoal ? '' : totalSteps > stepGoal*0.7 ? ' warn' : ''}">${totalSteps.toLocaleString()}</div>
+          <div class="macro-unit">steps</div>
+          <div class="macro-goal">Goal: ${stepGoal.toLocaleString()}</div>
+          <div class="progress"><div class="progress-fill teal" style="width:${stepPct}%"></div></div>
+        </div>
+        <div class="macro-card">
+          <div class="macro-label">Active Time</div>
+          <div class="macro-val">${totalMins}</div>
+          <div class="macro-unit">minutes</div>
+          <div class="macro-goal">Goal: 30 min</div>
+          <div class="progress"><div class="progress-fill teal" style="width:${Math.min(Math.round(totalMins/30*100),100)}%"></div></div>
+        </div>
+        <div class="macro-card">
+          <div class="macro-label">Cals Burned</div>
+          <div class="macro-val">${totalCals}</div>
+          <div class="macro-unit">kcal</div>
+          <div class="macro-goal">From activity</div>
+        </div>
+        <div class="macro-card">
+          <div class="macro-label">Sessions</div>
+          <div class="macro-val">${acts.length}</div>
+          <div class="macro-unit">logged</div>
+          <div class="macro-goal">Today</div>
+        </div>
+      </div>
+    </div>
+
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+      <div style="font-size:14px;font-weight:700;color:var(--navy)">Activity Log</div>
+      <button class="btn-primary teal" style="width:auto;padding:9px 16px;font-size:13px" onclick="document.getElementById('modal-activity').classList.add('open');updateActCalc()">+ Log Activity</button>
+    </div>
+
+    ${acts.length === 0 ? '<div class="card" style="text-align:center;padding:24px;color:var(--muted);font-size:14px">No activity logged yet today.<br>Tap "+ Log Activity" to get started.</div>' :
+      acts.map((a,i) => `
+        <div class="activity-row">
+          <div class="activity-icon" style="background:var(--teal-lt)">${ACT_ICONS[a.type]||'⚡'}</div>
+          <div>
+            <div class="activity-name">${ACTIVITIES[a.type]?.label || a.type}</div>
+            <div class="activity-detail">${a.duration} min${a.steps ? ' · ' + a.steps.toLocaleString() + ' steps' : ''}${a.notes ? ' · ' + a.notes : ''}</div>
+          </div>
+          <div class="activity-cal">-${a.calBurned} cal</div>
+          <button class="food-del" onclick="removeActivity(${i})">×</button>
+        </div>
+      `).join('')}
+  `;
+}
+
+function updateActCalc() {
+  const type = document.getElementById('act-type').value;
+  const mins = parseInt(document.getElementById('act-duration').value) || 0;
+  const p = PATIENTS[currentPid];
+  const weight_kg = 70; // default
+  const met = ACTIVITIES[type]?.metFactor || 3;
+  const cal = Math.round(met * weight_kg * (mins / 60));
+  document.getElementById('act-calc').textContent = 'Estimated: ~' + cal + ' calories burned';
+}
+
+function saveActivity() {
+  const type  = document.getElementById('act-type').value;
+  const mins  = parseInt(document.getElementById('act-duration').value) || 0;
+  const steps = parseInt(document.getElementById('act-steps').value)    || 0;
+  const notes = document.getElementById('act-notes').value.trim();
+  if (!mins) { showToast('Please enter duration'); return; }
+  const weight_kg = 70;
+  const met = ACTIVITIES[type]?.metFactor || 3;
+  const cal = Math.round(met * weight_kg * (mins / 60));
+  const acts = getActs(currentPid, currentDate);
+  acts.push({ type, duration:mins, steps, notes, calBurned:cal, loggedAt: new Date().toISOString() });
+  saveActs(currentPid, currentDate, acts);
+  closeActivity();
+  renderActivity();
+  showToast('Activity logged!');
+}
+function closeActivity() { document.getElementById('modal-activity').classList.remove('open'); }
+function removeActivity(i) {
+  const acts = getActs(currentPid, currentDate);
+  acts.splice(i, 1);
+  saveActs(currentPid, currentDate, acts);
+  renderActivity();
+}
+
+// ══════════════════════════════════════════════════
+// TRENDS PAGE
+// ══════════════════════════════════════════════════
+
+function renderTrends() {
+  const goals  = getGoals(currentPid);
+  const period = window._trendPeriod || 7;
+
+  // Build dataset for chosen period
+  const labels=[], dateStrs=[];
+  const datasets = { calories:[], sodium:[], potassium:[], protein:[],
+                     carbs:[], sugar:[], fat:[], phosphorus:[], steps:[], activity:[] };
+
+  for (let i = period-1; i >= 0; i--) {
+    const d = new Date();
+    d.setDate(d.getDate() - i);
+    const ds = d.toISOString().split('T')[0];
+    const log  = getLog(currentPid, ds);
+    const acts = getActs(currentPid, ds);
+    const t    = calcTotals(log);
+    const lbl  = period <= 7
+      ? d.toLocaleDateString('en-US',{weekday:'short'})
+      : d.toLocaleDateString('en-US',{month:'numeric',day:'numeric'});
+    labels.push(lbl);
+    dateStrs.push(ds);
+    Object.keys(datasets).forEach(k => {
+      if (k === 'steps')    datasets.steps.push(acts.reduce((s,a)=>s+(a.steps||0),0));
+      else if (k==='activity') datasets.activity.push(acts.reduce((s,a)=>s+(a.duration||0),0));
+      else datasets[k].push(t[k] || 0);
+    });
+  }
+
+  // Averages (logged days only)
+  function avg(arr) {
+    const logged = arr.filter(v=>v>0);
+    return logged.length ? Math.round(logged.reduce((s,v)=>s+v,0)/logged.length) : null;
+  }
+
+  const NUTRIENTS = [
+    { key:'calories',    label:'Calories',    unit:'kcal', color:'#1D9E75', goal:goals.calories   },
+    { key:'sodium',      label:'Sodium',      unit:'mg',   color:'#EF9F27', goal:goals.sodium     },
+    { key:'potassium',   label:'Potassium',   unit:'mg',   color:'#E57373', goal:goals.potassium  },
+    { key:'protein',     label:'Protein',     unit:'g',    color:'#185FA5', goal:goals.protein    },
+    { key:'carbs',       label:'Carbs',       unit:'g',    color:'#9C64A6', goal:goals.carbs      },
+    { key:'sugar',       label:'Sugar',       unit:'g',    color:'#F06292', goal:goals.sugar      },
+    { key:'fat',         label:'Total Fat',   unit:'g',    color:'#FF8A65', goal:null             },
+    { key:'phosphorus',  label:'Phosphorus',  unit:'mg',   color:'#78909C', goal:goals.phosphorus },
+  ];
+
+  const ACT_ITEMS = [
+    { key:'steps',    label:'Steps',    unit:'',    color:'#26A69A', goal:4000 },
+    { key:'activity', label:'Activity', unit:'min', color:'#42A5F5', goal:30   },
+  ];
+
+  // Summary cards
+  function summaryCard(label, val, goal, unit, color) {
+    if (!val) return `<div style="background:var(--bg);border-radius:10px;padding:10px;text-align:center">
+      <div style="font-size:11px;color:var(--muted);margin-bottom:3px">${label} avg</div>
+      <div style="font-size:16px;font-weight:700;color:var(--muted)">—</div>
+      <div style="font-size:10px;color:var(--muted)">No data</div></div>`;
+    const over = goal && val > goal;
+    const warn = goal && val > goal * 0.9;
+    const vc   = over ? 'var(--red)' : warn ? 'var(--amber)' : color;
+    const pct  = goal ? Math.min(Math.round(val/goal*100),120) : null;
+    return `<div style="background:var(--bg);border-radius:10px;padding:10px;text-align:center">
+      <div style="font-size:11px;color:var(--muted);margin-bottom:3px;white-space:nowrap">${label} avg</div>
+      <div style="font-size:16px;font-weight:700;color:${vc}">${val.toLocaleString()}</div>
+      <div style="font-size:10px;color:var(--muted)">${unit}${goal ? ' · goal '+goal.toLocaleString() : ''}</div>
+      ${goal ? `<div style="height:4px;background:var(--border);border-radius:2px;margin-top:5px;overflow:hidden">
+        <div style="height:100%;width:${Math.min(pct,100)}%;background:${vc};border-radius:2px"></div></div>` : ''}
+    </div>`;
+  }
+
+  // Period selector buttons
+  const periods = [7,14,30];
+  const periodBtns = periods.map(p =>
+    `<button onclick="window._trendPeriod=${p};renderTrends()"
+      style="flex:1;padding:7px;border:none;border-radius:7px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;
+             background:${p===period?'var(--navy)':'var(--card)'};color:${p===period?'#fff':'var(--muted)'}">
+      ${p} days
+    </button>`
+  ).join('');
+
+  // Build full nutrient table rows
+  function tableRows() {
+    let rows = `<tr style="background:var(--bg);font-size:10px;color:var(--muted);font-weight:700">
+      <th style="padding:6px 8px;text-align:left;position:sticky;left:0;background:var(--bg)">Date</th>
+      <th style="padding:6px 8px;text-align:right;white-space:nowrap">Cal</th>
+      <th style="padding:6px 8px;text-align:right;white-space:nowrap">Na mg</th>
+      <th style="padding:6px 8px;text-align:right;white-space:nowrap">K mg</th>
+      <th style="padding:6px 8px;text-align:right;white-space:nowrap">Pro g</th>
+      <th style="padding:6px 8px;text-align:right;white-space:nowrap">Carb g</th>
+      <th style="padding:6px 8px;text-align:right;white-space:nowrap">Sug g</th>
+      <th style="padding:6px 8px;text-align:right;white-space:nowrap">Fat g</th>
+      <th style="padding:6px 8px;text-align:right;white-space:nowrap">Steps</th>
+      <th style="padding:6px 8px;text-align:center">✓</th>
+    </tr>`;
+
+    // Goal row
+    rows += `<tr style="background:#FFF8E1;font-size:10px;color:#888">
+      <td style="padding:4px 8px;font-weight:600;position:sticky;left:0;background:#FFF8E1">Goal</td>
+      ${[goals.calories,goals.sodium,goals.potassium,goals.protein,goals.carbs,goals.sugar,null,4000].map(g=>
+        `<td style="padding:4px 8px;text-align:right">${g?g.toLocaleString():'—'}</td>`).join('')}
+      <td></td></tr>`;
+
+    labels.forEach((lbl, i) => {
+      const cal = datasets.calories[i];
+      const logged = cal > 0;
+      if (!logged) {
+        rows += `<tr style="border-top:0.5px solid var(--border)">
+          <td style="padding:7px 8px;font-size:12px;position:sticky;left:0;background:var(--card)">${lbl}</td>
+          <td colspan="8" style="text-align:center;font-size:11px;color:var(--muted);font-style:italic">Not logged</td>
+          <td style="text-align:center">—</td></tr>`;
+        return;
+      }
+      const checks = {
+        cal: !goals.calories  || cal <= goals.calories,
+        na:  !goals.sodium    || datasets.sodium[i] <= goals.sodium,
+        k:   !goals.potassium || datasets.potassium[i] <= goals.potassium,
+        sug: !goals.sugar     || datasets.sugar[i] <= goals.sugar,
+      };
+      const allOk = Object.values(checks).every(Boolean);
+      const status = allOk ? '✅' : '⚠️';
+
+      function cell(val, goal, unit='') {
+        const over = goal && val > goal;
+        const warn = goal && val > goal * 0.9;
+        const c = over ? 'var(--red)' : warn ? 'var(--amber)' : 'var(--text)';
+        const w = over || warn ? '700' : '400';
+        return `<td style="padding:7px 8px;text-align:right;font-size:12px;color:${c};font-weight:${w}">${val?val.toLocaleString():'—'}${unit}</td>`;
+      }
+
+      rows += `<tr style="border-top:0.5px solid var(--border)">
+        <td style="padding:7px 8px;font-size:12px;color:var(--text);position:sticky;left:0;background:var(--card)">${lbl}</td>
+        ${cell(datasets.calories[i],   goals.calories)}
+        ${cell(datasets.sodium[i],     goals.sodium)}
+        ${cell(datasets.potassium[i],  goals.potassium)}
+        ${cell(datasets.protein[i],    goals.protein)}
+        ${cell(datasets.carbs[i],      goals.carbs)}
+        ${cell(datasets.sugar[i],      goals.sugar)}
+        ${cell(datasets.fat[i],        null)}
+        ${cell(datasets.steps[i],      4000)}
+        <td style="text-align:center;font-size:14px">${status}</td>
+      </tr>`;
+    });
+    return rows;
+  }
+
+  // Build chart canvas tags
+  const chartIds = NUTRIENTS.concat(ACT_ITEMS).map(n=>n.key);
+
+  document.getElementById('page-trends').innerHTML = `
+    <div style="display:flex;gap:4px;background:var(--bg);border-radius:10px;padding:4px;margin-bottom:12px">
+      ${periodBtns}
+    </div>
+
+    <!-- Summary grid -->
+    <div class="card" style="padding:12px">
+      <div class="card-title" style="margin-bottom:10px">Average Daily Intake</div>
+      <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px">
+        ${NUTRIENTS.filter(n=>avg(datasets[n.key])!==null||n.goal).map(n=>
+          summaryCard(n.label, avg(datasets[n.key]), n.goal, n.unit, n.color)).join('')}
+      </div>
+    </div>
+
+    <!-- Nutrition charts -->
+    <div class="card" style="padding:12px">
+      <div class="card-title" style="margin-bottom:10px">Nutrition Trends — ${period} Days</div>
+      ${NUTRIENTS.map(n=>`
+        <div style="margin-bottom:16px">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+            <span style="font-size:12px;font-weight:600;color:var(--navy)">${n.label}</span>
+            <span style="font-size:11px;color:var(--muted)">${n.goal?'Goal: '+n.goal.toLocaleString()+' '+n.unit:n.unit}</span>
+          </div>
+          <canvas id="chart-${n.key}" height="80"></canvas>
+        </div>`).join('')}
+    </div>
+
+    <!-- Activity charts -->
+    <div class="card" style="padding:12px">
+      <div class="card-title" style="margin-bottom:10px">Activity Trends — ${period} Days</div>
+      ${ACT_ITEMS.map(n=>`
+        <div style="margin-bottom:16px">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+            <span style="font-size:12px;font-weight:600;color:var(--navy)">${n.label}</span>
+            <span style="font-size:11px;color:var(--muted)">${n.goal?'Goal: '+n.goal.toLocaleString()+' '+n.unit:n.unit}</span>
+          </div>
+          <canvas id="chart-${n.key}" height="80"></canvas>
+        </div>`).join('')}
+    </div>
+
+    <!-- Full data table -->
+    <div class="card" style="padding:0;overflow:hidden">
+      <div style="padding:12px 12px 8px;border-bottom:1px solid var(--border)">
+        <div class="card-title" style="margin:0">Daily Log — ${period} Days</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:2px">Red = over limit · Amber = 90%+ of limit</div>
+      </div>
+      <div style="overflow-x:auto;-webkit-overflow-scrolling:touch">
+        <table style="width:100%;border-collapse:collapse;min-width:520px">
+          ${tableRows()}
+        </table>
+      </div>
+    </div>
+    <div style="height:8px"></div>
+  `;
+
+  // Draw all charts
+  NUTRIENTS.concat(ACT_ITEMS).forEach(n => {
+    drawLineChart('chart-'+n.key, labels, datasets[n.key], n.color, n.goal);
+  });
+}
+
+
+function drawLineChart(canvasId, labels, data, color, goal) {
+  const canvas = document.getElementById(canvasId);
+  if (!canvas) return;
+  const ctx  = canvas.getContext('2d');
+  const DPR  = window.devicePixelRatio || 1;
+  const W    = canvas.offsetWidth || 340;
+  const H    = 80;
+  canvas.width  = W * DPR;
+  canvas.height = H * DPR;
+  ctx.scale(DPR, DPR);
+  canvas.style.width  = W + 'px';
+  canvas.style.height = H + 'px';
+  ctx.clearRect(0, 0, W, H);
+
+  const pad  = { t:8, r:8, b:20, l:36 };
+  const cW   = W - pad.l - pad.r;
+  const cH   = H - pad.t - pad.b;
+  const n    = data.length;
+  // Use logged max for scale, never let missed days (0) drive the axis
+  const loggedMax = Math.max(...data.filter((_,i)=>data[i]>0), goal||0, 1);
+  const maxV = loggedMax * 1.1;
+
+  const xPos = i => pad.l + (i / (n - 1)) * cW;
+  const yPos = v => pad.t + cH - (Math.min(v, maxV) / maxV * cH);
+
+  // Goal line
+  if (goal) {
+    const gy = yPos(goal);
+    ctx.setLineDash([4, 3]);
+    ctx.strokeStyle = 'rgba(13,46,110,0.18)';
+    ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(pad.l, gy); ctx.lineTo(W - pad.r, gy); ctx.stroke();
+    ctx.setLineDash([]);
+  }
+
+  // Draw line in segments — solid colored for logged days, dotted grey for missed
+  // A "missed" day is data[i] === 0
+  for (let i = 0; i < n - 1; i++) {
+    const x1 = xPos(i),   y1 = yPos(data[i]);
+    const x2 = xPos(i+1), y2 = yPos(data[i+1]);
+    const missedSegment = data[i] === 0 || data[i+1] === 0;
+
+    ctx.beginPath();
+    ctx.moveTo(x1, missedSegment && data[i] === 0 ? pad.t + cH : y1);
+    ctx.lineTo(x2, missedSegment && data[i+1] === 0 ? pad.t + cH : y2);
+
+    if (missedSegment) {
+      ctx.setLineDash([3, 4]);
+      ctx.strokeStyle = 'rgba(180,180,180,0.5)';
+      ctx.lineWidth = 1.5;
+    } else {
+      ctx.setLineDash([]);
+      const over = goal && (data[i] > goal || data[i+1] > goal);
+      ctx.strokeStyle = over ? '#E24B4A' : color;
+      ctx.lineWidth = 2;
+    }
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+
+  // Fill area under logged segments only
+  ctx.beginPath();
+  let started = false;
+  data.forEach((v, i) => {
+    const x = xPos(i);
+    const y = v > 0 ? yPos(v) : pad.t + cH;
+    if (!started) { ctx.moveTo(x, pad.t + cH); started = true; }
+    ctx.lineTo(x, y);
+  });
+  ctx.lineTo(xPos(n-1), pad.t + cH);
+  ctx.closePath();
+  ctx.fillStyle = color + '18';
+  ctx.fill();
+
+  // Dots — different style for logged vs missed
+  data.forEach((v, i) => {
+    const x = xPos(i);
+    const missed = v === 0;
+    const over   = !missed && goal && v > goal;
+    const y = missed ? pad.t + cH - 3 : yPos(v);
+
+    ctx.beginPath();
+    ctx.arc(x, y, missed ? 2.5 : 3.5, 0, Math.PI * 2);
+    ctx.fillStyle = missed ? '#D0D5E0' : over ? '#E24B4A' : color;
+    ctx.fill();
+
+    if (!missed) {
+      ctx.fillStyle = '#fff';
+      ctx.beginPath();
+      ctx.arc(x, y, 1.5, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  });
+
+  // X labels
+  ctx.fillStyle = '#7A8099';
+  ctx.font = '9px DM Sans, sans-serif';
+  ctx.textAlign = 'center';
+  const step = n > 14 ? 3 : n > 7 ? 2 : 1;
+  data.forEach((_, i) => {
+    if (i % step !== 0) return;
+    ctx.fillStyle = data[i] === 0 ? '#C8CDD8' : '#7A8099';
+    ctx.fillText(labels[i], xPos(i), H - 4);
+  });
+
+  // Y axis
+  ctx.textAlign = 'right';
+  ctx.font = '9px DM Sans, sans-serif';
+  [0, 0.5, 1].forEach(pct => {
+    const v = Math.round(loggedMax * pct);
+    const y = pad.t + cH - pct * cH;
+    ctx.fillStyle = '#AAB0C0';
+    ctx.fillText(v >= 1000 ? (v/1000).toFixed(1)+'k' : v, pad.l - 3, y + 3);
+  });
+}
+
+
+// ══════════════════════════════════════════════════
+// PROFILE PAGE
+// ══════════════════════════════════════════════════
+function renderProfile() {
+  const p     = PATIENTS[currentPid];
+  const goals = getGoals(currentPid);
+  const plan  = getNutrPlan(currentPid);
+
+  document.getElementById('page-profile').innerHTML = `
+    <div class="card" style="text-align:center;padding:24px">
+      <div style="width:64px;height:64px;background:linear-gradient(135deg,var(--navy),var(--blue));border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:24px;font-weight:700;color:#fff;margin:0 auto 12px">${p.initials}</div>
+      <div style="font-size:20px;font-weight:700;color:var(--navy)">${p.name}</div>
+      <div style="font-size:13px;color:var(--muted);margin-top:4px">${p.conditions.join(' · ')}</div>
+      ${plan ? `<div style="margin-top:10px"><span class="badge teal">✨ ${plan.framework || 'Custom'} Plan Active</span></div>` : '<div style="margin-top:10px"><span class="badge amber">No nutrition plan set — ask your nurse</span></div>'}
+    </div>
+
+    <div class="card">
+      <div class="card-title">My Daily Goals</div>
+      ${[
+        ['Calories',   goals.calories,   'kcal'],
+        ['Sodium',     goals.sodium,     'mg'],
+        ['Potassium',  goals.potassium,  'mg'],
+        ['Protein',    goals.protein,    'g'],
+        ['Carbs',      goals.carbs,      'g'],
+        ['Sugar',      goals.sugar,      'g'],
+        ['Fluid',      goals.fluid,      'ml'],
+        ['Phosphorus', goals.phosphorus, 'mg'],
+      ].filter(([,v]) => v != null).map(([label, val, unit]) =>
+        `<div class="settings-row">
+          <div class="settings-label">${label}</div>
+          <div class="settings-val">${val ? val.toLocaleString() + ' ' + unit : '—'}</div>
+        </div>`
+      ).join('')}
+      <div style="margin-top:10px;background:#FFF4F4;border-radius:8px;padding:10px 12px;font-size:12px;color:#A32D2D"><strong>🚫 Avoid:</strong> ${plan && plan.goals && plan.goals.avoid ? plan.goals.avoid : (p.avoid || 'Ask your nurse to set your food restrictions')}</div>
+      <div style="margin-top:8px;background:var(--teal-lt);border-radius:8px;padding:10px 12px;font-size:12px;color:#27500A"><strong>✅ Eat more:</strong> ${plan && plan.goals && plan.goals.recommend ? plan.goals.recommend : (p.recommend || 'Ask your nurse for personalized food recommendations')}</div>
+    </div>
+
+    ${plan?.mealGuidance ? `
+    <div class="card">
+      <div class="card-title">Sample Meals</div>
+      ${['breakfast','lunch','dinner','snacks'].map(m => `
+        <div class="settings-row">
+          <div style="flex:1">
+            <div class="settings-label" style="text-transform:capitalize">${m}</div>
+            <div style="font-size:12px;color:var(--muted);margin-top:2px">${plan.mealGuidance[m] || '—'}</div>
+          </div>
+        </div>
+      `).join('')}
+    </div>` : ''}
+
+    ${plan?.tips?.length ? `
+    <div class="card">
+      <div class="card-title">Tips From Your Care Team</div>
+      ${plan.tips.map(t => `<div style="font-size:13px;color:var(--text);padding:8px 0;border-bottom:0.5px solid var(--border)">💡 ${t}</div>`).join('')}
+    </div>` : ''}
+
+    <div class="card">
+      <div class="card-title">Account</div>
+      <div class="settings-row">
+        <div class="settings-label">Platform</div>
+        <div class="settings-val">SyncVitals RPM</div>
+      </div>
+      <div class="settings-row">
+        <div class="settings-label">Data storage</div>
+        <div class="settings-val">This device (offline)</div>
+      </div>
+      <div class="settings-row">
+        <div class="settings-label">Care team</div>
+        <div class="settings-val">Nurse R. Santos</div>
+      </div>
+      <button class="btn-secondary" style="margin-top:12px" onclick="signOut()">Sign Out</button>
+    </div>
+    <div style="height:8px"></div>
+  `;
+}
+
+function signOut() {
+  currentPid = null;
+  document.getElementById('s-app').classList.remove('active');
+  document.getElementById('s-login').classList.add('active');
+  document.getElementById('login-pin').value = '';
+}
+
+// ══════════════════════════════════════════════════
+// TOAST
+// ══════════════════════════════════════════════════
+let _toastTimer;
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.style.display = 'block';
+  clearTimeout(_toastTimer);
+  _toastTimer = setTimeout(() => t.style.display = 'none', 2800);
+}
+
+// Portion confirmed via explicit Save button
+</script>
+<!-- ── FOOD FLAG WARNING MODAL ── -->
+<div id="modal-flag" class="modal-overlay">
+  <div class="modal-sheet" style="max-height:70vh">
+    <div class="modal-handle"></div>
+    <div class="modal-header" style="border-bottom:3px solid #E24B4A">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+        <div style="width:40px;height:40px;background:#FFF0F0;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0">⚠️</div>
+        <div>
+          <div style="font-size:16px;font-weight:700;color:#C62828">Food Flag Alert</div>
+          <div style="font-size:12px;color:#E24B4A;font-weight:600" id="flag-food-name"></div>
+        </div>
+      </div>
+    </div>
+    <div class="modal-body">
+      <div id="flag-reason" style="background:#FFF0F0;border:1px solid #FFCDD2;border-radius:10px;padding:14px;margin-bottom:14px;font-size:13px;color:#B71C1C;line-height:1.6"></div>
+      <div id="flag-clinical-note" style="background:#FFF8E1;border:1px solid #FFE082;border-radius:10px;padding:12px;margin-bottom:16px;font-size:12px;color:#E65100;line-height:1.6;display:none"></div>
+      <div style="font-size:13px;color:#555;margin-bottom:16px">Your care team has flagged this item. Would you still like to add it?</div>
+      <button onclick="overrideFlagAndAdd()" style="width:100%;padding:12px;background:#E24B4A;border:none;border-radius:10px;color:#fff;font-size:14px;font-weight:700;cursor:pointer;margin-bottom:8px;font-family:inherit">Add Anyway (I understand the risk)</button>
+      <button onclick="closeFlagModal()" style="width:100%;padding:12px;background:var(--teal-lt);border:none;border-radius:10px;color:#1B5E20;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit">✓ Skip This Item (Recommended)</button>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

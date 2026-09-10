@@ -1,0 +1,969 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SyncVitals Command</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --navy: #0D2E6E; --blue: #185FA5; --green: #1D6035; --red: #A32D2D;
+  --amber: #633806; --teal: #1D9E75;
+  --bg: #F4F6FA; --card: #FFFFFF; --border: rgba(13,46,110,0.12);
+  --text: #1A1A2E; --muted: #666;
+  --crit-bg: #FCEBEB; --crit: #A32D2D;
+  --warn-bg: #FFF8E1; --warn: #633806;
+  --ok-bg: #EAF3DE; --ok: #27500A;
+}
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  background: var(--bg); color: var(--text); min-height: 100vh; }
+
+/* TOPBAR */
+.topbar { background: linear-gradient(135deg, var(--navy), var(--blue));
+  padding: 0 20px; height: 52px; display: flex; align-items: center;
+  gap: 14px; box-shadow: 0 2px 12px rgba(13,46,110,0.25); position: sticky; top:0; z-index:100; }
+.tb-logo { display:flex; align-items:center; gap:8px; }
+.tb-logo-mark { width:28px; height:28px; background:rgba(255,255,255,0.2);
+  border-radius:8px; display:flex; align-items:center; justify-content:center;
+  font-size:16px; }
+.tb-title { color:#fff; font-size:15px; font-weight:800; letter-spacing:-0.3px; }
+.tb-sub { color:rgba(255,255,255,0.6); font-size:11px; margin-left:4px; }
+.tb-links { margin-left:auto; display:flex; gap:8px; }
+.tb-link { font-family:var(--mono,monospace); font-size:11px; padding:6px 12px; border-radius:6px;
+  font-weight:700; cursor:pointer; text-decoration:none; display:inline-flex; align-items:center;
+  gap:5px; transition:all 0.15s; white-space:nowrap; letter-spacing:0.03em; }
+.tb-link:hover { filter:brightness(1.15); }
+#link-care { background:rgba(255,255,255,0.15); color:#fff; border:1px solid rgba(255,255,255,0.3); }
+#link-pred2 { background:linear-gradient(135deg,#1D6035,#1D9E75); color:#fff; border:1px solid rgba(255,255,255,0.2); }
+.tb-engine { display:flex; align-items:center; gap:6px; color:rgba(255,255,255,0.8);
+  font-size:11px; border-left:1px solid rgba(255,255,255,0.2); padding-left:14px; margin-left:6px; }
+.eng-dot { width:8px; height:8px; border-radius:50%; background:#4ade80;
+  animation: pulse 1.5s infinite; }
+@keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.5;transform:scale(0.8)} }
+
+/* LAYOUT */
+.layout { display:grid; grid-template-columns: 300px 1fr 300px; gap:16px;
+  padding:16px; max-width:1400px; margin:0 auto; }
+@media(max-width:1100px) { .layout { grid-template-columns:1fr 1fr; } .right-col { display:none; } }
+@media(max-width:700px) { .layout { grid-template-columns:1fr; } }
+
+/* CARDS */
+.card { background:var(--card); border-radius:12px; border:0.5px solid var(--border);
+  overflow:hidden; box-shadow:0 1px 4px rgba(13,46,110,0.06); }
+.card-hd { padding:10px 14px; border-bottom:0.5px solid var(--border);
+  display:flex; align-items:center; gap:8px; }
+.card-hd-title { font-size:12px; font-weight:700; color:var(--navy);
+  text-transform:uppercase; letter-spacing:0.05em; flex:1; }
+.card-body { padding:12px 14px; }
+
+/* STAT ROW */
+.stat-row { display:grid; grid-template-columns:repeat(4,1fr); gap:10px;
+  margin-bottom:16px; }
+.stat { background:var(--card); border-radius:10px; padding:12px;
+  border:0.5px solid var(--border); text-align:center; }
+.stat-val { font-size:26px; font-weight:800; color:var(--navy); }
+.stat-lbl { font-size:11px; color:var(--muted); margin-top:2px; }
+.stat.crit { background:var(--crit-bg); border-color:rgba(162,45,45,0.2); }
+.stat.crit .stat-val { color:var(--crit); }
+.stat.warn { background:var(--warn-bg); border-color:rgba(99,56,6,0.2); }
+.stat.warn .stat-val { color:var(--warn); }
+.stat.ok   { background:var(--ok-bg); border-color:rgba(39,80,10,0.2); }
+.stat.ok   .stat-val { color:var(--ok); }
+
+/* PATIENT RISK CARDS */
+.pt-card { border:0.5px solid var(--border); border-radius:10px; padding:11px 13px;
+  margin-bottom:8px; cursor:pointer; transition:all 0.15s; }
+.pt-card:hover { box-shadow:0 2px 8px rgba(13,46,110,0.12); border-color:var(--blue); }
+.pt-card.crit { border-left:3px solid var(--crit); background:var(--crit-bg); }
+.pt-card.warn { border-left:3px solid #EF9F27; background:var(--warn-bg); }
+.pt-card.ok   { border-left:3px solid var(--teal); }
+.pt-row { display:flex; align-items:center; gap:10px; }
+.pt-score { width:40px; height:40px; border-radius:50%; display:flex; align-items:center;
+  justify-content:center; font-size:13px; font-weight:800; flex-shrink:0; box-shadow:none; }
+.pt-score.crit { background:#F5D0D0; color:var(--crit); border:1.5px solid rgba(162,45,45,0.3); }
+.pt-score.warn { background:#FFF0CC; color:#7A4500; border:1.5px solid rgba(239,159,39,0.3); }
+.pt-score.ok   { background:#D5EFE8; color:var(--ok); border:1.5px solid rgba(29,158,117,0.3); }
+.pt-name { font-size:13px; font-weight:700; color:var(--navy); }
+.pt-dx   { font-size:11px; color:var(--muted); margin-top:1px; }
+.pt-scores { margin-left:auto; display:flex; gap:8px; text-align:right; }
+.pt-score-box { }
+.pt-score-lbl { font-size:9px; color:var(--muted); }
+.pt-score-val { font-size:13px; font-weight:700; }
+.pt-score-val.hi { color:var(--crit); }
+.pt-score-val.md { color:var(--amber); }
+.pt-score-val.lo { color:var(--ok); }
+.pt-bar { height:4px; background:#eee; border-radius:2px; margin:7px 0 4px; overflow:hidden; }
+.pt-bar-fill { height:100%; border-radius:2px; transition:width 0.5s; }
+.pt-tags { display:flex; gap:4px; flex-wrap:wrap; }
+.tag { font-size:10px; font-weight:600; padding:2px 7px; border-radius:8px; }
+.tag.er   { background:var(--crit-bg); color:var(--crit); }
+.tag.adm  { background:var(--warn-bg); color:var(--amber); }
+.tag.anom { background:#E8F0FA; color:var(--navy); }
+.tag.ok   { background:var(--ok-bg); color:var(--ok); }
+.pt-ai { font-size:11px; color:#444; line-height:1.5; margin-top:6px;
+  padding:6px 8px; background:rgba(13,46,110,0.04); border-radius:6px;
+  border-left:2px solid var(--blue); }
+.pt-actions { display:flex; gap:6px; margin-top:7px; }
+.pt-btn { font-size:11px; font-weight:600; padding:4px 10px; border-radius:7px;
+  border:none; cursor:pointer; transition:background 0.15s; }
+.pt-btn.primary { background:var(--navy); color:#fff; }
+.pt-btn.primary:hover { background:var(--blue); }
+.pt-btn.secondary { background:rgba(13,46,110,0.08); color:var(--navy); }
+.pt-btn.secondary:hover { background:rgba(13,46,110,0.15); }
+
+/* ALERT LOG */
+.alert-item { display:flex; gap:8px; padding:7px 0;
+  border-bottom:0.5px solid var(--border); align-items:flex-start; }
+.alert-item:last-child { border-bottom:none; }
+.alert-dot { width:8px; height:8px; border-radius:50%; flex-shrink:0; margin-top:3px; }
+.alert-dot.crit { background:var(--crit); }
+.alert-dot.warn { background:#EF9F27; }
+.alert-dot.ok   { background:var(--teal); }
+.alert-text { flex:1; font-size:12px; line-height:1.5; }
+.alert-name { font-weight:700; color:var(--navy); }
+.alert-ts   { font-size:10px; color:var(--muted); }
+
+/* PIPELINE */
+.pipeline { display:flex; gap:0; margin:10px 0; }
+.pipe-step { flex:1; text-align:center; position:relative; }
+.pipe-step::after { content:''; position:absolute; top:14px; left:50%; right:-50%;
+  height:2px; background:var(--border); z-index:0; }
+.pipe-step:last-child::after { display:none; }
+.pipe-icon { width:28px; height:28px; border-radius:50%; margin:0 auto 4px;
+  display:flex; align-items:center; justify-content:center; font-size:13px;
+  position:relative; z-index:1; border:2px solid var(--border); background:#fff; }
+.pipe-icon.active { border-color:var(--blue); background:var(--blue); }
+.pipe-icon.done   { border-color:var(--teal); background:var(--teal); }
+.pipe-icon.crit   { border-color:var(--crit); background:var(--crit); }
+.pipe-lbl { font-size:9px; color:var(--muted); font-weight:600;
+  text-transform:uppercase; letter-spacing:0.04em; }
+
+/* COST AVOIDANCE */
+.cost-bar { background:linear-gradient(135deg,#0D2E6E,#185FA5);
+  border-radius:10px; padding:14px; color:#fff; margin-bottom:14px; }
+.cost-amt { font-size:28px; font-weight:800; }
+.cost-sub { font-size:11px; opacity:0.7; margin-top:3px; }
+
+/* EMPTY + LOADING */
+.empty { padding:24px; text-align:center; color:var(--muted); font-size:13px; }
+.loading-bar { height:3px; background:linear-gradient(90deg,var(--blue),var(--teal));
+  border-radius:2px; animation:loading 1.5s infinite; }
+@keyframes loading { 0%{width:0%} 50%{width:80%} 100%{width:100%} }
+
+/* TABS */
+.tab-bar { display:flex; gap:2px; padding:4px; background:rgba(13,46,110,0.06);
+  border-radius:10px; margin-bottom:12px; }
+.tab-btn { flex:1; padding:6px 10px; border:none; border-radius:8px; font-size:12px;
+  font-weight:600; cursor:pointer; background:transparent; color:var(--muted);
+  transition:all 0.15s; }
+.tab-btn.active { background:#fff; color:var(--navy);
+  box-shadow:0 1px 4px rgba(13,46,110,0.12); }
+
+/* MODAL */
+.modal-overlay { display:none; position:fixed; inset:0;
+  background:rgba(13,46,110,0.4); z-index:500; align-items:center; justify-content:center; }
+.modal-overlay.open { display:flex; }
+.modal { background:#fff; border-radius:16px; padding:20px; width:90%; max-width:480px;
+  box-shadow:0 8px 32px rgba(13,46,110,0.2); }
+.modal-title { font-size:15px; font-weight:800; color:var(--navy); margin-bottom:12px; }
+.modal-row { margin-bottom:10px; }
+.modal-label { font-size:12px; font-weight:600; color:var(--muted); margin-bottom:4px; }
+.modal-inp { width:100%; padding:9px; border:0.5px solid var(--border);
+  border-radius:8px; font-size:13px; font-family:inherit; }
+.modal-btns { display:flex; gap:8px; margin-top:14px; }
+.btn { padding:9px 16px; border-radius:9px; border:none; font-size:13px;
+  font-weight:600; cursor:pointer; transition:background 0.15s; }
+.btn-primary { background:var(--navy); color:#fff; flex:1; }
+.btn-primary:hover { background:var(--blue); }
+.btn-secondary { background:rgba(13,46,110,0.08); color:var(--navy); }
+.btn-secondary:hover { background:rgba(13,46,110,0.15); }
+</style>
+<script src="data-engine.js"></script>
+</head>
+<body>
+
+<!-- TOPBAR -->
+<div class="topbar">
+  <div class="tb-logo">
+    <div class="tb-logo-mark">🏥</div>
+    <div>
+      <span class="tb-title">SyncVitals</span>
+      <span class="tb-sub">Command</span>
+    </div>
+  </div>
+  <div class="tb-links">
+    <button class="tb-link" id="link-care" onclick="goCarePlan(event)">📋 AI Care Plan</button>
+    <button class="tb-link" id="link-pred2" onclick="goPredictAI(event)">🧠 Prediction AI</button>
+  </div>
+  <div class="tb-engine">
+    <div class="eng-dot" id="eng-dot"></div>
+    <span id="eng-status">Engine running</span>
+    <span id="cycle-badge" style="background:rgba(255,255,255,0.15);border-radius:6px;padding:2px 8px;font-size:10px;margin-left:4px">Cycle —</span>
+  </div>
+</div>
+
+<!-- MAIN LAYOUT -->
+<div class="layout">
+
+  <!-- LEFT: Patient Risk Monitor -->
+  <div>
+    <div class="stat-row" id="stat-row">
+      <div class="stat" onclick="setCmdFilter('all')" id="cmd-filter-all" style="cursor:pointer;border:2px solid var(--navy);transition:all 0.15s"><div class="stat-val" id="stat-pts">6</div><div class="stat-lbl">All Patients</div></div>
+      <div class="stat crit" onclick="setCmdFilter('crit')" id="cmd-filter-crit" style="cursor:pointer;border:2px solid transparent;transition:all 0.15s"><div class="stat-val" id="stat-crit">—</div><div class="stat-lbl">🚨 Critical</div></div>
+      <div class="stat warn" onclick="setCmdFilter('warn')" id="cmd-filter-warn" style="cursor:pointer;border:2px solid transparent;transition:all 0.15s"><div class="stat-val" id="stat-warn">—</div><div class="stat-lbl">⚠️ Watch</div></div>
+      <div class="stat ok" onclick="setCmdFilter('ok')" id="cmd-filter-ok" style="cursor:pointer;border:2px solid transparent;transition:all 0.15s"><div class="stat-val" id="stat-ok">—</div><div class="stat-lbl">✓ Stable</div></div>
+    </div>
+
+    <div class="card">
+      <div class="card-hd">
+        <span class="card-hd-title">Patient Risk Monitor</span>
+        <span style="font-size:10px;color:var(--muted)" id="last-update">Initializing…</span>
+      </div>
+      <div class="card-body" id="patient-list">
+        <div class="loading-bar"></div>
+        <div class="empty">Running prediction engine…</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- CENTER: Dashboard -->
+  <div>
+    <!-- Cost Avoidance -->
+    <div class="cost-bar" id="cost-bar">
+      <div style="font-size:11px;font-weight:700;opacity:0.7;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:4px">💰 Historical Admission Cost (All Patients)</div>
+      <div class="cost-amt" id="cost-amt">$99,500</div>
+      <div class="cost-sub">RPM target: 30–40% reduction through early intervention</div>
+    </div>
+
+    <!-- AI Pipeline -->
+    <div class="card" style="margin-bottom:14px">
+      <div class="card-hd">
+        <span class="card-hd-title">🧠 AI Prediction Pipeline</span>
+        <span id="pipe-cycle" style="font-size:10px;color:var(--muted)">Cycle 0</span>
+      </div>
+      <div class="card-body">
+        <div class="pipeline" id="pipeline">
+          <div class="pipe-step">
+            <div class="pipe-icon" id="pipe-0">📥</div>
+            <div class="pipe-lbl">Ingest</div>
+          </div>
+          <div class="pipe-step">
+            <div class="pipe-icon" id="pipe-1">🔍</div>
+            <div class="pipe-lbl">Anomaly</div>
+          </div>
+          <div class="pipe-step">
+            <div class="pipe-icon" id="pipe-2">📊</div>
+            <div class="pipe-lbl">Risk Score</div>
+          </div>
+          <div class="pipe-step">
+            <div class="pipe-icon" id="pipe-3">🤖</div>
+            <div class="pipe-lbl">AI Predict</div>
+          </div>
+          <div class="pipe-step">
+            <div class="pipe-icon" id="pipe-4">🔔</div>
+            <div class="pipe-lbl">Alerts</div>
+          </div>
+        </div>
+        <div style="font-size:11px;color:var(--muted);text-align:center" id="pipe-status">Starting engine…</div>
+      </div>
+    </div>
+
+    <!-- Tabs: Alerts / Admissions / Population -->
+    <div class="card">
+      <div class="card-body">
+        <div class="tab-bar">
+          <button class="tab-btn active" onclick="showTab('alerts')">🔔 Alerts</button>
+          <button class="tab-btn" onclick="showTab('er-risk')">🚨 ER/Hospital Risk</button>
+          <button class="tab-btn" onclick="showTab('admissions')">🏥 Admissions</button>
+          <button class="tab-btn" onclick="showTab('population')">📊 Population</button>
+        </div>
+        <div id="tab-alerts"></div>
+        <div id="tab-er-risk" style="display:none"></div>
+        <div id="tab-admissions" style="display:none"></div>
+        <div id="tab-population" style="display:none"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- RIGHT: Quick Actions + ER/Admit Tracker -->
+  <div class="right-col">
+    <div class="card" style="margin-bottom:14px">
+      <div class="card-hd"><span class="card-hd-title">Quick Actions</span></div>
+      <div class="card-body" style="display:flex;flex-direction:column;gap:8px">
+        <button class="btn btn-secondary" style="width:100%" onclick="openAdmLog()">+ Log ER / Admission</button>
+        <button class="btn btn-secondary" style="width:100%" onclick="runManualCycle()">↺ Refresh Now</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-hd"><span class="card-hd-title">ER & Admission Log</span></div>
+      <div class="card-body" id="adm-log-list">
+        <div class="empty">No events logged</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- LOG ADMISSION MODAL -->
+<div class="modal-overlay" id="adm-modal">
+  <div class="modal">
+    <div class="modal-title">Log ER Visit / Admission</div>
+    <div class="modal-row">
+      <div class="modal-label">Patient</div>
+      <select class="modal-inp" id="adm-patient">
+        <option value="P001">Margaret Okafor — HTN, CKD</option>
+        <option value="P002">Robert Chen — CHF, DM Crisis</option>
+        <option value="P003">Diane Morales — COPD, Declining SpO2</option>
+        <option value="P004">James Okafor — DM, HTN</option>
+        <option value="P005">Patricia Walsh — CHF</option>
+        <option value="P006">Marcus Rivera — HTN</option>
+      </select>
+    </div>
+    <div class="modal-row">
+      <div class="modal-label">Event Type</div>
+      <select class="modal-inp" id="adm-type">
+        <option value="ER">🚨 ER Visit</option>
+        <option value="ADMIT">🏥 Hospitalization</option>
+        <option value="OBS">👁 Observation Stay</option>
+        <option value="ICU">⚠️ ICU Admission</option>
+      </select>
+    </div>
+    <div class="modal-row">
+      <div class="modal-label">Reason / Chief Complaint</div>
+      <input class="modal-inp" id="adm-reason" type="text" placeholder="e.g. Hypertensive urgency SBP 195">
+    </div>
+    <div class="modal-row">
+      <div class="modal-label">Facility</div>
+      <input class="modal-inp" id="adm-facility" type="text" placeholder="e.g. Memorial Hospital">
+    </div>
+    <div class="modal-btns">
+      <button class="btn btn-secondary" onclick="closeAdmLog()">Cancel</button>
+      <button class="btn btn-primary" onclick="confirmAdmLog()">Log Event</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ════════════════════════════════════════════════════════════════
+// SYNCVITALS COMMAND DASHBOARD
+// Standalone bridge between RPM Platform and Prediction AI.
+// Runs its own lightweight prediction engine.
+// Providers click through to either platform.
+// ════════════════════════════════════════════════════════════════
+
+// ── PLATFORM URLS (update these to match actual file paths/URLs) ──
+const RPM_URL  = 'syncvitals-rpm.html';
+const PRED_URL = 'syncvitals-predict.html';
+
+// openRPM and openPred replaced by goCarePlan() / goPredictAI()
+
+// ── PATIENT DATA (mirrors RPM platform) ──
+const PATIENTS = [
+  { id:'P001', name:'Margaret Okafor', age:68, dx:'HTN, CKD Stage 3',
+    conditions:['HTN','CKD'], phase:30, vitals:{ sbp:172, dbp:98, hr:88, spo2:97, weight:162, glucose:null },
+    adherence:'partial', riskBase:62, deteriorating:true },
+  { id:'P002', name:'Robert Chen', age:74, dx:'CHF, DM Crisis',
+    conditions:['CHF','DM'], phase:30, vitals:{ sbp:148, dbp:88, hr:96, spo2:93, weight:203, glucose:218 },
+    adherence:'partial', riskBase:76, deteriorating:true },
+  { id:'P003', name:'Diane Morales', age:61, dx:'COPD — Declining SpO2',
+    conditions:['COPD'], phase:60, vitals:{ sbp:128, dbp:80, hr:82, spo2:89, weight:154, glucose:null },
+    adherence:'yes', riskBase:58, deteriorating:true },
+  { id:'P004', name:'James Okafor', age:71, dx:'DM, HTN Stable',
+    conditions:['DM','HTN'], phase:60, vitals:{ sbp:136, dbp:84, hr:74, spo2:98, weight:188, glucose:142 },
+    adherence:'yes', riskBase:30, deteriorating:false },
+  { id:'P005', name:'Patricia Walsh', age:79, dx:'CHF Stable',
+    conditions:['CHF'], phase:60, vitals:{ sbp:132, dbp:78, hr:74, spo2:96, weight:158, glucose:null },
+    adherence:'yes', riskBase:36, deteriorating:false },
+  { id:'P006', name:'Marcus Rivera', age:52, dx:'HTN Stage 2 — Non-Adherent',
+    conditions:['HTN'], phase:30, vitals:{ sbp:158, dbp:96, hr:88, spo2:98, weight:195, glucose:null },
+    adherence:'no', riskBase:52, deteriorating:true },
+];
+
+// ── ADMISSION HISTORY ──
+let admHistory = [
+  { pid:'P001', type:'ER',    date:'2024-11-15', reason:'Hypertensive urgency SBP 195/110', facility:'Memorial Hospital', cost:2400 },
+  { pid:'P001', type:'OBS',   date:'2025-02-08', reason:'Acute kidney injury — creatinine 2.4', facility:'Memorial Hospital', cost:8500 },
+  { pid:'P002', type:'ADMIT', date:'2024-09-22', reason:'Decompensated CHF — 12 lb weight gain', facility:'St. Vincent Medical', cost:34000 },
+  { pid:'P002', type:'ADMIT', date:'2025-01-14', reason:'CHF exacerbation — SpO₂ 87%', facility:'St. Vincent Medical', cost:28500 },
+  { pid:'P002', type:'ER',    date:'2025-03-30', reason:'Glucose 387 — DKA workup', facility:'St. Vincent Medical', cost:3200 },
+  { pid:'P003', type:'ER',    date:'2025-01-05', reason:'COPD exacerbation — SpO₂ 88%', facility:'Riverside Community', cost:1900 },
+  { pid:'P005', type:'ADMIT', date:'2024-08-17', reason:'CHF — 7 lb gain, ankle edema 3+', facility:'Memorial Hospital', cost:21000 },
+];
+
+// ── ENGINE STATE ──
+let engineState = {};
+let cycle = 0;
+let engineOn = true;
+let alerts = [];
+
+PATIENTS.forEach(p => {
+  engineState[p.id] = {
+    riskScore: p.riskBase,
+    riskLevel: p.riskBase >= 60 ? 'crit' : p.riskBase >= 40 ? 'warn' : 'ok',
+    anomalies: [],
+    prediction: null,
+    er48h: null,
+    hosp30d: null,
+    det24h: null,
+    predUpdated: null,
+  };
+});
+
+// ── RISK SCORING (lightweight — no DISEASES dependency) ──
+function scorePatient(p) {
+  const s = engineState[p.id];
+  const v = p.vitals;
+  let score = p.riskBase;
+  const anoms = [];
+
+  // BP
+  if (p.conditions.includes('HTN') || p.conditions.includes('CHF')) {
+    if (v.sbp >= 180) { score += 20; anoms.push({ sev:'crit', msg:'SBP ' + v.sbp + ' — hypertensive crisis' }); }
+    else if (v.sbp >= 160) { score += 12; anoms.push({ sev:'warn', msg:'SBP ' + v.sbp + ' — Stage 2' }); }
+    else if (v.sbp >= 140) { score += 6; }
+  }
+  // SpO2
+  if (v.spo2 !== null) {
+    if (v.spo2 < 90) { score += 22; anoms.push({ sev:'crit', msg:'SpO₂ ' + v.spo2 + '% — hypoxia' }); }
+    else if (v.spo2 < 94) { score += 12; anoms.push({ sev:'warn', msg:'SpO₂ ' + v.spo2 + '% — low' }); }
+  }
+  // Glucose
+  if (v.glucose !== null && p.conditions.includes('DM')) {
+    if (v.glucose > 300) { score += 18; anoms.push({ sev:'crit', msg:'Glucose ' + v.glucose + ' — DKA risk' }); }
+    else if (v.glucose > 180) { score += 8; anoms.push({ sev:'warn', msg:'Glucose ' + v.glucose + ' — above target' }); }
+  }
+  // CHF weight
+  if (p.conditions.includes('CHF') && v.weight) {
+    const base = p.id === 'P002' ? 183 : p.id === 'P005' ? 155 : v.weight;
+    const gain = v.weight - base;
+    if (gain >= 5) { score += 15; anoms.push({ sev:'crit', msg:'+' + gain.toFixed(1) + ' lbs — CHF decompensation risk' }); }
+    else if (gain >= 2) { score += 8; anoms.push({ sev:'warn', msg:'+' + gain.toFixed(1) + ' lbs — weight gain' }); }
+  }
+  // Adherence
+  if (p.adherence === 'no') score += 14;
+  else if (p.adherence === 'partial') score += 7;
+  // Drift
+  if (p.deteriorating) score += Math.sin(cycle * 0.3) * 4;
+
+  score = Math.max(0, Math.min(99, Math.round(score)));
+  s.riskScore = score;
+  s.riskLevel = score >= 60 ? 'crit' : score >= 40 ? 'warn' : 'ok';
+  s.anomalies = anoms;
+
+  // Alert on high score
+  if (score >= 65 && score > (s._lastAlert || 0)) {
+    alerts.unshift({ sev:'crit', pid:p.id, name:p.name, msg:anoms[0]?.msg || 'Risk score ' + score, ts:new Date().toLocaleTimeString() });
+    s._lastAlert = score;
+    if (alerts.length > 20) alerts.pop();
+  }
+}
+
+// ── AI PREDICTION (for highest-risk patient) ──
+function runAI(p) {
+  // Rule-based — no API key needed. Swap for fetch call in production.
+  const s   = engineState[p.id];
+  const rs  = s.riskScore;
+  const v   = p.vitals;
+  const crit = s.anomalies.filter(a=>a.sev==='crit').length;
+
+  // These are already computed in the cycle — just build the prediction object
+  const er   = s.er48h   || 0;
+  const hosp = s.hosp30d || 0;
+  const det  = Math.min(95, Math.round(er * 0.55 + rs * 0.3 + crit * 5));
+
+  const intervention = er >= 60 || rs >= 75 ? 'Immediate' :
+                       er >= 40 || rs >= 60 ? 'Within 4h' :
+                       er >= 25 || rs >= 45 ? 'Within 24h' :
+                       rs >= 30             ? 'Routine' : 'None';
+
+  const trend = p.deteriorating && rs >= 60 ? 'Deteriorating' :
+                p.deteriorating             ? 'Stable-Watch' :
+                rs < 35                     ? 'Improving' : 'Stable';
+
+  const topAnom = s.anomalies[0]?.msg || null;
+  const riskWord = rs >= 70 ? 'high' : rs >= 45 ? 'moderate' : 'low';
+
+  const summary = p.name.split(' ')[0] + ' (' + p.dx + ') shows ' + riskWord +
+    ' risk (score ' + rs + '/100). ' +
+    (topAnom ? 'Key concern: ' + topAnom + '. ' : '') +
+    'ER visit probability 48h: ' + er + '%. Hospital admission 30d: ' + hosp + '%. Trend: ' + trend + '.';
+
+  const top_concern = topAnom ||
+    (er >= 50 ? 'High ER risk — ' + er + '% in 48h' :
+     hosp >= 50 ? 'Elevated admission risk — ' + hosp + '%' :
+     'Monitor ' + p.dx + ' parameters');
+
+  const action = intervention === 'Immediate' ? 'Contact physician now' :
+                 intervention === 'Within 4h'  ? 'Notify physician within 4 hours' :
+                 intervention === 'Within 24h' ? 'Schedule urgent review within 24h' :
+                 'Continue monitoring per care plan';
+
+  s.prediction = { er_visit_48h:er, hospital_admission_30d:hosp,
+    deterioration_24h:det, intervention, trend, summary, top_concern, action };
+  s.predUpdated = new Date().toLocaleTimeString();
+
+  if (window.SVEngine) {
+    window.SVEngine.setDerived(p.id, {
+      riskScore: rs, er48h: er, hosp30d: hosp, det24h: det,
+      summary, topConcern: top_concern, action, source: 'command'
+    });
+  } else {
+    try {
+      localStorage.setItem('sv_pred_' + p.id, JSON.stringify({
+        riskScore:rs, er48h:er, hosp30d:hosp, det24h:det,
+        summary, top_concern, action, ts:Date.now()
+      }));
+    } catch(e) {}
+  }
+}
+
+
+// ── MAIN ENGINE CYCLE ──
+async function runCycle() {
+  if (!engineOn) return;
+  cycle++;
+  setPipe(0,'active');
+  try {
+
+  // Pull this tick's evolving vitals from the shared engine (same dataset
+  // Nurse Portal and Predict AI are reading) so scoring reacts to real
+  // movement instead of static seed vitals.
+  if (window.SVEngine) {
+    const shared = window.SVEngine.tick();
+    PATIENTS.forEach(p => {
+      const ep = shared.patients[p.id];
+      if (ep) Object.assign(p.vitals, ep.vitals);
+    });
+  }
+
+  // Score all patients
+  PATIENTS.forEach(p => scorePatient(p));
+  setPipe(0,'done'); setPipe(1,'done'); setPipe(2,'done');
+
+  // Score-based ER/Hospital prediction for ALL patients (rule-based, no API)
+  setPipe(3,'active');
+  PATIENTS.forEach(p => {
+    const s = engineState[p.id];
+    const rs = s.riskScore;
+    const adh = p.adherence === 'yes' ? 88 : p.adherence === 'partial' ? 58 : 30;
+    // ER risk 48h
+    let er = Math.round(rs * 0.45 + (s.anomalies.filter(a=>a.sev==='crit').length * 8));
+    er += p.deteriorating ? 10 : 0;
+    er += p.vitals.spo2 && p.vitals.spo2 < 92 ? 20 : 0;
+    er += p.vitals.sbp  && p.vitals.sbp >= 180 ? 18 : 0;
+    er += p.conditions.includes('CHF') && p.vitals.weight > (p.baselineWeight||p.vitals.weight) + 4 ? 20 : 0;
+    er  = Math.min(95, Math.max(2, er));
+    // Hospital 30d
+    let hosp = Math.round(rs * 0.6 + er * 0.25 + Math.max(0,(p.age-65)*0.4));
+    hosp += adh < 60 ? 12 : 0;
+    hosp  = Math.min(95, Math.max(3, hosp));
+    if (er < 25 && hosp > er + 35) hosp = Math.round(er + 35);
+    s.er48h   = er;
+    s.hosp30d = hosp;
+    // Push to the shared engine so RPM / Predict AI see Command's scores live
+    if (window.SVEngine) {
+      window.SVEngine.setDerived(p.id, {
+        riskScore: rs, er48h: er, hosp30d: hosp,
+        source: 'command'
+      });
+    } else {
+      try {
+        const existing = JSON.parse(localStorage.getItem('sv_pred_' + p.id) || '{}');
+        localStorage.setItem('sv_pred_' + p.id, JSON.stringify({
+          ...existing, riskScore: rs, er48h: er, hosp30d: hosp, ts: Date.now()
+        }));
+      } catch(e) {}
+    }
+  });
+  // AI call for highest-risk patient (for clinical narrative — uses API if key set)
+  const sorted = [...PATIENTS].sort((a,b)=>
+    engineState[b.id].riskScore - engineState[a.id].riskScore);
+  const target = sorted[cycle % sorted.length];
+  if (engineState[target.id].riskScore >= 40) {
+    try { runAI(target); } catch(e) {}
+  }
+  setPipe(3,'done');
+
+  setPipe(4,'done');
+  // Write risk scores to localStorage for RPM to read
+  PATIENTS.forEach(p => {
+    try {
+      const existing = JSON.parse(localStorage.getItem('sv_pred_' + p.id) || '{}');
+      existing.riskScore = engineState[p.id].riskScore;
+      existing.ts = Date.now();
+      localStorage.setItem('sv_pred_' + p.id, JSON.stringify(existing));
+    } catch(e) {}
+  });
+  renderAll();
+  document.getElementById('cycle-badge').textContent = 'Cycle ' + cycle;
+  document.getElementById('last-update').textContent = 'Updated ' + new Date().toLocaleTimeString();
+  setTimeout(()=>PIPES.forEach((_,i)=>setPipe(i,'idle')), 2000);
+  } catch(cycleErr) {
+    console.error('runCycle error:', cycleErr);
+    document.getElementById('pipe-status').textContent = 'Error: ' + cycleErr.message;
+    renderAll(); // still try to render with whatever data we have
+  }
+}
+
+// ── PIPELINE UI ──
+const PIPES = [0,1,2,3,4];
+function setPipe(idx, status) {
+  const el = document.getElementById('pipe-' + idx);
+  if (!el) return;
+  el.className = 'pipe-icon ' + (status === 'done' ? 'done' : status === 'active' ? 'active' : status === 'crit' ? 'crit' : '');
+  const icons = ['📥','🔍','📊','🤖','🔔'];
+  el.textContent = status === 'done' ? '✓' : status === 'active' ? '⚡' : icons[idx];
+  document.getElementById('pipe-status').textContent =
+    status === 'active' ? ['Ingesting vitals…','Detecting anomalies…','Scoring risk…',
+      'Running AI prediction…','Processing alerts…'][idx] :
+    status === 'done'   ? 'Complete — cycle ' + cycle : 'Standing by';
+}
+
+// ── RENDER ──
+function renderAll() {
+  renderPatientList();
+  renderStats();
+  renderActiveTab();
+}
+
+function renderStats() {
+  const crit = PATIENTS.filter(p=>engineState[p.id].riskLevel==='crit').length;
+  const warn = PATIENTS.filter(p=>engineState[p.id].riskLevel==='warn').length;
+  const ok   = PATIENTS.filter(p=>engineState[p.id].riskLevel==='ok').length;
+  document.getElementById('stat-crit').textContent = crit;
+  document.getElementById('stat-warn').textContent = warn;
+  document.getElementById('stat-ok').textContent   = ok;
+
+  const totalCost = admHistory.reduce((s,e)=>s+(e.cost||0),0);
+  document.getElementById('cost-amt').textContent  = '$' + totalCost.toLocaleString();
+}
+
+function riskColor(v) {
+  if (v === null || v === undefined) return '';
+  return parseInt(v) >= 50 ? 'hi' : parseInt(v) >= 25 ? 'md' : 'lo';
+}
+
+let _cmdFilter = 'all';
+
+function setCmdFilter(level) {
+  _cmdFilter = level;
+  ['all','crit','warn','ok'].forEach(f => {
+    const el = document.getElementById('cmd-filter-' + f);
+    if (!el) return;
+    if (f === level) {
+      el.style.border = '2px solid var(--navy)';
+      el.style.boxShadow = '0 2px 8px rgba(13,46,110,0.2)';
+      el.style.transform = 'scale(1.04)';
+    } else {
+      el.style.border = '2px solid transparent';
+      el.style.boxShadow = 'none';
+      el.style.transform = 'scale(1)';
+    }
+  });
+  renderPatientList();
+}
+
+function renderPatientList() {
+  let sorted = [...PATIENTS].sort((a,b)=>
+    engineState[b.id].riskScore - engineState[a.id].riskScore);
+  if (_cmdFilter !== 'all') {
+    sorted = sorted.filter(p => engineState[p.id].riskLevel === _cmdFilter);
+  }
+  const el = document.getElementById('patient-list');
+  if (!el) return;
+  if (sorted.length === 0) {
+    el.innerHTML = '<div class="empty">No ' + {crit:'critical',warn:'watch',ok:'stable',all:''}[_cmdFilter] + ' patients</div>';
+    return;
+  }
+
+  el.innerHTML = sorted.map(p => {
+    const s    = engineState[p.id];
+    const lv   = s.riskLevel;
+    const clr  = lv==='crit'?'#E24B4A':lv==='warn'?'#EF9F27':'#1D9E75';
+    const adms = admHistory.filter(a=>a.pid===p.id);
+    const er   = adms.filter(a=>a.type==='ER').length;
+    const ad   = adms.filter(a=>a.type==='ADMIT'||a.type==='ICU').length;
+    const now  = new Date();
+    const d90  = new Date(now-90*86400000).toISOString().slice(0,10);
+    const rec  = adms.filter(a=>a.date>=d90).length;
+    const pr   = s.prediction;
+
+    return `<div class="pt-card ${lv}" onclick="openPatientDetail('${p.id}')">
+      <div class="pt-row">
+        <div class="pt-score ${lv}">${s.riskScore}</div>
+        <div>
+          <div class="pt-name">${p.name}</div>
+          <div class="pt-dx">${p.dx} · Phase ${p.phase}</div>
+        </div>
+        <div class="pt-scores">
+          ${s.er48h !== null ? `<div class="pt-score-box">
+            <div class="pt-score-lbl">🚨 ER 48h</div>
+            <div class="pt-score-val ${riskColor(s.er48h)}">${s.er48h}%</div>
+          </div>` : ''}
+          ${s.hosp30d !== null ? `<div class="pt-score-box">
+            <div class="pt-score-lbl">🏥 Adm 30d</div>
+            <div class="pt-score-val ${riskColor(s.hosp30d)}">${s.hosp30d}%</div>
+          </div>` : ''}
+        </div>
+      </div>
+      <div class="pt-bar">
+        <div class="pt-bar-fill" style="width:${s.riskScore}%;background:${clr}"></div>
+      </div>
+      <div class="pt-tags">
+        ${s.anomalies.map(a=>`<span class="tag ${a.sev==='crit'?'er':'anom'}">${a.sev==='crit'?'🚨':'⚠️'} ${a.msg}</span>`).join('')}
+        ${er>0?`<span class="tag er">🚨 ${er} ER visit${er>1?'s':''}</span>`:''}
+        ${ad>0?`<span class="tag adm">🏥 ${ad} admission${ad>1?'s':''}</span>`:''}
+        ${rec>0?`<span class="tag warn">${rec} event${rec>1?'s':''} last 90d</span>`:''}
+        ${s.anomalies.length===0&&er===0&&ad===0?`<span class="tag ok">✓ Stable</span>`:''}
+      </div>
+      ${pr?.summary?`<div class="pt-ai">${pr.summary}</div>`:''}
+      <div class="pt-actions">
+        <button class="pt-btn primary" onclick="event.stopPropagation();openRPMPatient('${p.id}')">📋 Care Plan</button>
+        <button class="pt-btn secondary" onclick="event.stopPropagation();openPredPatient('${p.id}')">🧠 Prediction AI</button>
+        <button class="pt-btn secondary" onclick="event.stopPropagation();openAdmLogFor('${p.id}')">+ Log Event</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ── TABS ──
+let activeTab = 'alerts';
+function showTab(tab) {
+  activeTab = tab;
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  event.target.classList.add('active');
+  ['alerts','er-risk','admissions','population'].forEach(t => {
+    document.getElementById('tab-' + t).style.display = t === tab ? 'block' : 'none';
+  });
+  renderActiveTab();
+}
+
+function renderActiveTab() {
+  if (activeTab === 'alerts') renderAlerts();
+  else if (activeTab === 'er-risk') renderERRiskTab();
+  else if (activeTab === 'admissions') renderAdmissions();
+  else renderPopulation();
+}
+
+function renderERRiskTab() {
+  const el = document.getElementById('tab-er-risk');
+  if (!el) return;
+
+  const sorted = [...PATIENTS].sort((a,b)=> (engineState[b.id].er48h||0) - (engineState[a.id].er48h||0));
+
+  const riskBand = (v) => {
+    if (v == null) return { col:'#aaa', bg:'#f5f5f5', label:'—' };
+    if (v >= 60) return { col:'#A32D2D', bg:'#FCEBEB', label:'HIGH' };
+    if (v >= 35) return { col:'#633806', bg:'#FFF8E1', label:'MODERATE' };
+    return { col:'#27500A', bg:'#EAF3DE', label:'LOW' };
+  };
+
+  el.innerHTML =
+    // ER Risk ranking
+    '<div style="font-size:11px;font-weight:700;color:var(--navy);text-transform:uppercase;' +
+    'letter-spacing:0.05em;margin-bottom:8px;padding-bottom:5px;border-bottom:2px solid var(--navy)">🚨 ER Visit Risk — 48 Hour</div>' +
+    sorted.map(p => {
+      const s  = engineState[p.id];
+      const er = s.er48h;
+      const b  = riskBand(er);
+      return '<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:0.5px solid var(--border)">' +
+        '<div style="font-size:13px;font-weight:700;color:var(--navy);width:130px;flex-shrink:0">' + p.name.split(' ')[0] + ' ' + p.name.split(' ')[1] + '</div>' +
+        '<div style="flex:1;background:#eee;border-radius:4px;height:10px;overflow:hidden">' +
+          '<div style="height:100%;width:' + (er||0) + '%;background:' + (b.col) + ';border-radius:4px;transition:width 0.5s"></div>' +
+        '</div>' +
+        '<div style="font-size:16px;font-weight:800;color:' + b.col + ';width:42px;text-align:right">' + (er != null ? er + '%' : '—') + '</div>' +
+        '<span style="font-size:9px;font-weight:700;padding:2px 6px;border-radius:6px;background:' + b.bg + ';color:' + b.col + ';width:60px;text-align:center">' + b.label + '</span>' +
+        '<button data-pid="' + p.id + '" onclick="openRPMPatient(this.dataset.pid)" style="background:var(--navy);color:#fff;border:none;border-radius:6px;padding:3px 8px;font-size:10px;cursor:pointer">Open</button>' +
+      '</div>';
+    }).join('') +
+
+    // Hospital Admission ranking
+    '<div style="font-size:11px;font-weight:700;color:var(--navy);text-transform:uppercase;' +
+    'letter-spacing:0.05em;margin:14px 0 8px;padding-bottom:5px;border-bottom:2px solid var(--navy)">🏥 Hospital Admission Risk — 30 Day</div>' +
+    [...PATIENTS].sort((a,b)=> (engineState[b.id].hosp30d||0) - (engineState[a.id].hosp30d||0)).map(p => {
+      const s    = engineState[p.id];
+      const hosp = s.hosp30d;
+      const b    = riskBand(hosp);
+      const adms = admHistory.filter(a => a.pid === p.id);
+      const prior = adms.filter(a => a.type === 'ADMIT' || a.type === 'ICU').length;
+      return '<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:0.5px solid var(--border)">' +
+        '<div style="font-size:13px;font-weight:700;color:var(--navy);width:130px;flex-shrink:0">' + p.name.split(' ')[0] + ' ' + p.name.split(' ')[1] + '</div>' +
+        '<div style="flex:1;background:#eee;border-radius:4px;height:10px;overflow:hidden">' +
+          '<div style="height:100%;width:' + (hosp||0) + '%;background:' + b.col + ';border-radius:4px;transition:width 0.5s"></div>' +
+        '</div>' +
+        '<div style="font-size:16px;font-weight:800;color:' + b.col + ';width:42px;text-align:right">' + (hosp != null ? hosp + '%' : '—') + '</div>' +
+        '<span style="font-size:9px;font-weight:700;padding:2px 6px;border-radius:6px;background:' + b.bg + ';color:' + b.col + ';width:60px;text-align:center">' + b.label + '</span>' +
+        (prior > 0 ? '<span style="font-size:10px;color:#633806;font-weight:600;white-space:nowrap">' + prior + ' prior</span>' : '<span style="width:40px"></span>') +
+        '<button data-pid="' + p.id + '" onclick="openRPMPatient(this.dataset.pid)" style="background:var(--navy);color:#fff;border:none;border-radius:6px;padding:3px 8px;font-size:10px;cursor:pointer">Open</button>' +
+      '</div>';
+    }).join('') +
+
+    // Disclaimer
+    '<div style="margin-top:12px;padding:8px 10px;background:#f5f5f5;border-radius:6px;font-size:10px;color:#888;line-height:1.5">' +
+    'Risk scores are computed by a rule-based clinical engine using real-time vitals and anomaly detection. ' +
+    'HIGH = ≥60% · MODERATE = 35–59% · LOW = &lt;35%. For clinical decision support only — all decisions require physician review.</div>';
+}
+
+
+function renderAlerts() {
+  const el = document.getElementById('tab-alerts');
+  if (!el) return;
+  if (!alerts.length) { el.innerHTML = '<div class="empty">No alerts yet — engine running</div>'; return; }
+  el.innerHTML = alerts.slice(0,10).map(a => {
+    const p = PATIENTS.find(x=>x.id===a.pid);
+    return `<div class="alert-item">
+      <div class="alert-dot ${a.sev}"></div>
+      <div class="alert-text">
+        <span class="alert-name">${a.name}</span> — ${a.msg}
+        <div class="alert-ts">${a.ts} · <a href="#" onclick="openRPMPatient('${a.pid}');return false" style="color:var(--blue);text-decoration:none">Open in RPM →</a></div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function renderAdmissions() {
+  const el = document.getElementById('tab-admissions');
+  if (!el) return;
+  const typeMap = {
+    ER:    {icon:'🚨',label:'ER Visit',    col:'var(--crit)'},
+    ADMIT: {icon:'🏥',label:'Hospital',   col:'var(--amber)'},
+    OBS:   {icon:'👁',label:'Observation',col:'var(--blue)'},
+    ICU:   {icon:'⚠️',label:'ICU',         col:'#7A0000'},
+  };
+  const sorted = [...admHistory].sort((a,b)=>b.date.localeCompare(a.date));
+  el.innerHTML = sorted.map(e => {
+    const t = typeMap[e.type] || typeMap.ER;
+    const p = PATIENTS.find(x=>x.id===e.pid);
+    return `<div class="alert-item">
+      <div style="font-size:16px">${t.icon}</div>
+      <div class="alert-text">
+        <span class="alert-name">${p?.name||e.pid}</span>
+        <span style="font-size:10px;font-weight:600;color:${t.col};margin-left:6px">${t.label}</span>
+        <div style="font-size:12px;color:var(--text);margin-top:2px">${e.reason}</div>
+        <div class="alert-ts">${e.date} · ${e.facility}${e.cost?' · $'+e.cost.toLocaleString():''}</div>
+      </div>
+    </div>`;
+  }).join('') || '<div class="empty">No events logged</div>';
+}
+
+function renderPopulation() {
+  const el = document.getElementById('tab-population');
+  if (!el) return;
+  const byDx = {};
+  PATIENTS.forEach(p => {
+    p.conditions.forEach(c => {
+      if (!byDx[c]) byDx[c] = { count:0, crit:0, totalScore:0 };
+      byDx[c].count++;
+      byDx[c].totalScore += engineState[p.id].riskScore;
+      if (engineState[p.id].riskLevel === 'crit') byDx[c].crit++;
+    });
+  });
+  el.innerHTML = Object.entries(byDx).map(([dx,d]) =>
+    `<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:0.5px solid var(--border)">
+      <div style="font-size:12px;font-weight:700;color:var(--navy);width:60px">${dx}</div>
+      <div style="flex:1">
+        <div style="height:6px;background:#eee;border-radius:3px;overflow:hidden">
+          <div style="height:100%;width:${Math.round(d.totalScore/d.count)}%;background:${d.crit>0?'var(--crit)':'var(--teal)'};border-radius:3px"></div>
+        </div>
+      </div>
+      <div style="font-size:11px;color:var(--muted);text-align:right;width:80px">
+        ${d.count} patient${d.count>1?'s':''}
+        ${d.crit>0?`<span style="color:var(--crit);font-weight:700"> · ${d.crit} crit</span>`:''}
+      </div>
+    </div>`
+  ).join('');
+}
+
+// ── ADMISSION LOG ──
+function openAdmLog()       { document.getElementById('adm-modal').classList.add('open'); }
+function openAdmLogFor(pid) { document.getElementById('adm-patient').value = pid; openAdmLog(); }
+function closeAdmLog()      { document.getElementById('adm-modal').classList.remove('open'); }
+function confirmAdmLog() {
+  const pid      = document.getElementById('adm-patient').value;
+  const type     = document.getElementById('adm-type').value;
+  const reason   = document.getElementById('adm-reason').value.trim();
+  const facility = document.getElementById('adm-facility').value.trim() || 'Not specified';
+  if (!reason) { alert('Please enter a reason.'); return; }
+  admHistory.unshift({
+    pid, type, reason, facility,
+    date: new Date().toISOString().slice(0,10), cost: null
+  });
+  alerts.unshift({
+    sev:'warn', pid, name: PATIENTS.find(x=>x.id===pid)?.name||pid,
+    msg: type + ': ' + reason, ts: new Date().toLocaleTimeString()
+  });
+  closeAdmLog();
+  document.getElementById('adm-reason').value = '';
+  renderAll();
+}
+
+// ── CLICK-THROUGH TO PLATFORMS ──
+function openRPMPatient(pid) {
+  // Opens RPM platform — postMessage support if it's already open
+  const win = window.open(RPM_URL, 'rpm_platform');
+  // After load, try to postMessage the patient ID
+  setTimeout(() => {
+    try { win.postMessage({ type:'openPatient', pid }, '*'); } catch(e) {}
+  }, 1500);
+}
+
+function openPredPatient(pid) {
+  window.open(PRED_URL, 'pred_platform');
+}
+
+function openPatientDetail(pid) {
+  openRPMPatient(pid);
+}
+
+// ── START ENGINE ──
+async function startEngine() {
+  document.getElementById('eng-status').textContent = 'Running';
+  // Render immediately with initial riskBase scores so list isn't blank
+  renderAll();
+  await runCycle();
+  setInterval(runCycle, 18000); // every 18 seconds
+}
+
+startEngine();
+
+
+// ── SMART PLATFORM NAVIGATION ──
+// Default: navigate in same tab
+// Cmd/Ctrl+click → new tab (standard browser behaviour)
+let _hasUnsavedWork = false;
+
+// Only flag unsaved work on actual form inputs, not programmatic changes
+document.addEventListener('input', e => {
+  // Ignore engine-driven updates — only flag real user typing in forms
+  const tag = e.target.tagName;
+  if ((tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') && e.isTrusted) {
+    _hasUnsavedWork = true;
+  }
+});
+
+function _navTo(url, winName, event) {
+  // Cmd/Ctrl+click = open new tab
+  if (event && (event.metaKey || event.ctrlKey)) {
+    window.open(url, '_blank');
+    return;
+  }
+  // Unsaved work — simple confirm
+  if (_hasUnsavedWork) {
+    if (!confirm('You have unsaved changes. Navigate away and lose them?')) return;
+    _hasUnsavedWork = false;
+  }
+  window.location.href = url;
+}
+
+
+// Poll nutrition alerts every 30s
+setInterval(loadNutritionAlerts, 30000);
+document.addEventListener('DOMContentLoaded', () => { setTimeout(loadNutritionAlerts, 1000); });
+
+function goCarePlan(e)  { _navTo(typeof RPM_URL!=='undefined'?RPM_URL:'syncvitals-rpm.html',     'sv_rpm',     e); }
+function goPredictAI(e) { _navTo(typeof PRED_URL!=='undefined'?PRED_URL:'syncvitals-predict.html', 'sv_pred',    e); }
+function goCommand(e)   { /* already here */ }
+</script>
+</body>
+</html>

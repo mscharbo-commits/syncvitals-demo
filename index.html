@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SyncVitals — Connected Demo</title>
+<script src="data-engine.js"></script>
+<style>
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+  body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#F4F6FA;color:#1A1A2E;min-height:100vh;}
+  .wrap{max-width:920px;margin:0 auto;padding:56px 24px;}
+  h1{font-size:26px;font-weight:800;color:#0D2E6E;letter-spacing:-0.3px;}
+  .sub{color:#666;margin-top:8px;font-size:15px;line-height:1.5;max-width:640px;}
+  .status{margin-top:22px;display:flex;align-items:center;gap:10px;font-size:13px;color:#27500A;background:#EAF3DE;border:1px solid rgba(39,80,10,0.15);padding:10px 14px;border-radius:8px;width:fit-content;}
+  .dot{width:8px;height:8px;border-radius:50%;background:#27500A;animation:pulse 1.5s infinite;}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:32px;}
+  @media(max-width:700px){.grid{grid-template-columns:1fr;}}
+  .card{background:#fff;border:1px solid rgba(13,46,110,0.12);border-radius:12px;padding:22px;text-decoration:none;color:inherit;display:block;transition:transform .15s, box-shadow .15s;}
+  .card:hover{transform:translateY(-2px);box-shadow:0 8px 24px rgba(13,46,110,0.12);}
+  .card-title{font-size:16px;font-weight:700;color:#0D2E6E;}
+  .card-desc{font-size:13px;color:#666;margin-top:6px;line-height:1.5;}
+  .tag{display:inline-block;margin-top:12px;font-size:11px;font-weight:700;color:#185FA5;background:rgba(24,95,165,0.1);padding:3px 8px;border-radius:6px;}
+  .note{margin-top:36px;font-size:13px;color:#888;line-height:1.6;background:#fff;border:1px solid rgba(13,46,110,0.1);border-radius:10px;padding:16px 18px;}
+  .note b{color:#1A1A2E;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>SyncVitals — Connected Portal Demo</h1>
+  <p class="sub">All four portals below read and write the same shared patient dataset in real time. Open any two side by side — a change in one shows up in the other within seconds.</p>
+  <div class="status"><span class="dot"></span><span id="status-text">Loading shared data…</span></div>
+
+  <div class="grid">
+    <a class="card" href="syncvitals-command.html">
+      <div class="card-title">Command Dashboard</div>
+      <div class="card-desc">Live risk-scoring engine across all patients — pipeline view, alerts, and AI clinical narrative for the highest-risk patient each cycle.</div>
+      <span class="tag">Drives the simulation</span>
+    </a>
+    <a class="card" href="syncvitals-predict.html">
+      <div class="card-title">Prediction AI</div>
+      <div class="card-desc">Disease-specific deterioration modeling — ER/hospitalization probability, anomaly detection, and per-condition simulated sensor data.</div>
+      <span class="tag">Drives the simulation</span>
+    </a>
+    <a class="card" href="syncvitals-rpm.html">
+      <div class="card-title">Nurse Portal (RPM)</div>
+      <div class="card-desc">Patient registry, BP/vitals trend charts, AI care plans, and escalation workflow — reflects whatever Command / Predict AI are computing live.</div>
+      <span class="tag">Reads live data</span>
+    </a>
+    <a class="card" href="sv-patient-nutrition.html">
+      <div class="card-title">Patient Nutrition Portal</div>
+      <div class="card-desc">Patient-facing food logging and condition-specific nutrition guidance, with alerts surfaced back to the Nurse Portal.</div>
+      <span class="tag">Reads live data</span>
+    </a>
+  </div>
+
+  <div class="note">
+    <b>How the demo works:</b> a shared data engine (<code>data-engine.js</code>) ticks every 8 seconds, evolving each patient's vitals and recomputing risk scores. Command Dashboard and Prediction AI can each push their own richer, disease-specific analysis on top of that baseline — whichever one you have open "wins" the narrative, but every portal is always reading the same underlying numbers. For the best demo, open Command Dashboard first, then open Nurse Portal in a second tab and watch the risk panel update on its own.
+  </div>
+</div>
+<script>
+  function updateStatus(state) {
+    state = state || (window.SVEngine && window.SVEngine.loadState());
+    if (!state) return;
+    document.getElementById('status-text').textContent =
+      'Shared dataset live — tick ' + state.tick + ' · last updated ' + new Date(state.updatedAt).toLocaleTimeString();
+  }
+  window.addEventListener('sv:update', function(e){ updateStatus(e.detail); });
+  document.addEventListener('DOMContentLoaded', function(){ if (window.SVEngine) updateStatus(window.SVEngine.loadState()); });
+</script>
+</body>
+</html>
