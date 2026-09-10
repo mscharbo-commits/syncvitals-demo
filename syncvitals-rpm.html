@@ -67,8 +67,11 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .action-text{font-size:14px;color:#1a1a1a;line-height:1.5;flex:1}
 .action-text.done{color:var(--sv-navy);text-decoration:none}
 .cp-item:has(.action-check.chk){background:rgba(29,158,117,0.04);border-radius:6px}
-.sv-trend{display:flex;align-items:flex-end;gap:3px;height:44px;margin-top:8px}
-.sv-bar{flex:1;border-radius:2px 2px 0 0}
+.sv-trend{display:flex;align-items:flex-end;gap:4px;height:44px;margin-top:8px;overflow-x:auto}
+.sv-bar{flex:0 0 auto;width:10px;min-width:10px;border-radius:2px 2px 0 0}
+.sv-trend-range{display:flex;gap:4px;margin-top:6px}
+.sv-trend-range button{flex:0 0 auto;font-size:10px;font-weight:600;padding:3px 9px;border-radius:6px;border:0.5px solid var(--sv-border);background:#fff;color:var(--sv-navy-mid);cursor:pointer}
+.sv-trend-range button.active{background:var(--sv-navy);color:#fff;border-color:var(--sv-navy)}
 .sv-esc-box.esc-ok{background:#EAF3DE;border-color:#9ACBA0}
 .sv-esc-box.esc-ok .esc-label{color:#27500A}
 .sv-esc-box.esc-ok .esc-text{color:#4A7A20}
@@ -518,6 +521,11 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
       <div style="font-size:13px;color:#888;margin-bottom:6px" id="np-trend-subtitle">Loading…</div>
       <div class="sv-trend" id="np-trend-bars"></div>
       <div style="display:flex;justify-content:space-between;font-size:11px;color:#bbb;margin-top:4px" id="np-trend-labels"></div>
+      <div class="sv-trend-range" id="np-trend-range">
+        <button data-days="7" onclick="setTrendRange(7)">7D</button>
+        <button data-days="14" onclick="setTrendRange(14)">14D</button>
+        <button data-days="30" onclick="setTrendRange(30)">30D</button>
+      </div>
       <div style="display:flex;gap:8px;margin-top:8px;font-size:10px" id="np-trend-stats"></div>
       <div id="np-trend-intervention" style="display:none;margin-top:8px;padding:8px 10px;border-radius:8px;background:#E8F2FB;border-left:3px solid #185FA5;font-size:11px;color:#0D2E6E"></div>
     </div>
@@ -3942,6 +3950,29 @@ function renderPatientContext(p) {
 }
 
 // ── RENDER TREND CHART FROM PATIENT VITAL HISTORY ──
+let _trendRangeDays = 14;
+function setTrendRange(days) {
+  _trendRangeDays = days;
+  document.querySelectorAll('#np-trend-range button').forEach(function(b){ b.classList.toggle('active', +b.dataset.days === days); });
+  const active = svPatients.find(function(x){ return x.id === activePatientId; });
+  if (active) renderTrendChart(active);
+}
+
+// Real BP monitoring is a handful of readings per day (or continuous-monitor
+// spot checks), not one every few seconds — the underlying data ticks much
+// faster than that for demo purposes, so this collapses everything down to
+// one representative (most recent) reading per calendar day before charting.
+function bucketHistoryByDay(history) {
+  const byDay = {};
+  const order = [];
+  history.forEach(function(h) {
+    const day = new Date(h.ts).toISOString().slice(0, 10);
+    if (!byDay[day]) order.push(day);
+    byDay[day] = h; // last entry for that day wins — most current reading
+  });
+  return order.map(function(day) { return byDay[day]; });
+}
+
 function renderTrendChart(p) {
   const barsEl = document.getElementById('np-trend-bars');
   const labelsEl = document.getElementById('np-trend-labels');
@@ -3950,12 +3981,17 @@ function renderTrendChart(p) {
   const statsEl = document.getElementById('np-trend-stats');
   if (!barsEl) return;
 
-  const history = p.vitalHistory || [];
-  if (!history.length) {
+  const rangeButtons = document.getElementById('np-trend-range');
+  if (rangeButtons) rangeButtons.querySelectorAll('button').forEach(function(b){ b.classList.toggle('active', +b.dataset.days === _trendRangeDays); });
+
+  const rawHistory = p.vitalHistory || [];
+  if (!rawHistory.length) {
     barsEl.innerHTML = '<div style="font-size:12px;color:#aaa;padding:8px">No history yet</div>';
     return;
   }
 
+  const daily = bucketHistoryByDay(rawHistory).slice(-_trendRangeDays);
+  const history = daily; // used below, including by the intervention banner
   const sbpValues = history.map(r => r.sbp).filter(Boolean);
   if (!sbpValues.length) return;
 
@@ -3978,29 +4014,40 @@ function renderTrendChart(p) {
     return '#1D9E75';
   }
 
-  barsEl.innerHTML = sbpValues.map(sbp => {
+  barsEl.innerHTML = history.map(h => {
+    const sbp = h.sbp;
+    if (!sbp) return '';
     const heightPct = Math.round(((sbp - minVal) / range) * 100);
-    return `<div class="sv-bar" style="height:${Math.max(heightPct, 8)}%;background:${barColor(sbp)}" title="${sbp} mmHg"></div>`;
+    const dateStr = new Date(h.ts).toLocaleDateString('en-US', {month:'short', day:'numeric'});
+    return `<div class="sv-bar" style="height:${Math.max(heightPct, 8)}%;background:${barColor(sbp)}" title="${dateStr}: ${sbp} mmHg"></div>`;
   }).join('');
 
-  // Labels
-  const firstDate = new Date(history[0].ts);
-  const lastDate = new Date(history[history.length - 1].ts);
-  const fmt = d => d.toLocaleDateString('en-US', {month:'short', day:'numeric'});
-  if (labelsEl) labelsEl.innerHTML = `<span>${fmt(firstDate)}</span><span>Today</span>`;
+  // Labels — evenly spaced actual dates instead of just first/last, so the
+  // axis reflects real calendar time rather than implying rapid-fire readings.
+  if (labelsEl) {
+    const fmt = d => d.toLocaleDateString('en-US', {month:'short', day:'numeric'});
+    const labelCount = Math.min(4, history.length);
+    const labels = [];
+    for (let i = 0; i < labelCount; i++) {
+      const idx = labelCount === 1 ? 0 : Math.round(i * (history.length - 1) / (labelCount - 1));
+      const isLast = idx === history.length - 1;
+      labels.push('<span>' + (isLast ? 'Today' : fmt(new Date(history[idx].ts))) + '</span>');
+    }
+    labelsEl.innerHTML = labels.join('');
+  }
 
   // Subtitle
   const daySpan = history.length;
   const subtitles = {
-    rising: `Rising trend over ${daySpan} readings — BP has increased ${Math.abs(diff)} mmHg`,
-    falling: `Improving trend over ${daySpan} readings — BP down ${Math.abs(diff)} mmHg`,
-    stable: `Stable trend over ${daySpan} readings — BP variation within normal range`
+    rising: `Rising trend over ${daySpan} days — BP has increased ${Math.abs(diff)} mmHg`,
+    falling: `Improving trend over ${daySpan} days — BP down ${Math.abs(diff)} mmHg`,
+    stable: `Stable trend over ${daySpan} days — BP variation within normal range`
   };
   if (subtitleEl) {
-    subtitleEl.textContent = subtitles[trendDir];
+    subtitleEl.textContent = subtitles[trendDir] + ' (1 reading/day shown)';
     subtitleEl.style.color = trendDir === 'rising' ? '#A32D2D' : trendDir === 'falling' ? '#27500A' : '#888';
   }
-  if (titleEl) titleEl.textContent = `${daySpan}-reading BP trend`;
+  if (titleEl) titleEl.textContent = `BP Trend — last ${daySpan} days`;
 
   // Stats
   const avg = Math.round(sbpValues.reduce((s,v)=>s+v,0) / sbpValues.length);
