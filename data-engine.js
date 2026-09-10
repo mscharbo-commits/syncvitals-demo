@@ -59,12 +59,119 @@
   function jitter(base, spread) { return base + (Math.random() - 0.5) * 2 * spread; }
   function round1(v) { return Math.round(v * 10) / 10; }
 
+  // ── LONGITUDINAL HISTORY (10-20 day backfill) ──
+  // Real RPM value isn't just a live snapshot — it's the trend, and
+  // specifically catching a decline early enough that intervention works.
+  // Each patient gets a narrative pattern instead of a flat/monotonic
+  // trajectory: some decline throughout (untreated), some show a clear
+  // intervention point where a clinician acted and the trend reversed,
+  // one shows steady improvement since a new diagnosis, and the rest stay
+  // stable. This mirrors how real physiologic + lab drift work — smooth
+  // trends with daily noise, not random walk.
+  const HISTORY_PATTERNS = {
+    P001: { pattern: 'decline' },                                   // progressive CKD, untreated — shows why escalation matters
+    P002: { pattern: 'intervention', day: 10, note: 'Furosemide increased 20mg\u219240mg; f/u scheduled' },
+    P003: { pattern: 'decline' },                                   // progressive COPD, untreated
+    P004: { pattern: 'stable' },
+    P005: { pattern: 'stable' },
+    P006: { pattern: 'intervention', day: 9, note: 'Adherence coaching call; pharmacy blister-pack enrollment' },
+    P007: { pattern: 'stable' },
+    P008: { pattern: 'stable' },
+    P009: { pattern: 'stable' },
+    P010: { pattern: 'intervention', day: 8, note: 'Diuretic titration after early weight-gain alert' },
+    P011: { pattern: 'stable' },
+    P012: { pattern: 'improving' }                                  // newly diagnosed, responding to new regimen
+  };
+  const HISTORY_DAYS = 16;
+
+  function severityAtDay(cap, t, info) {
+    // t is 0..1 across the backfill window
+    if (info.pattern === 'stable') return cap * 0.15 * t;
+    if (info.pattern === 'decline') return cap * t;
+    if (info.pattern === 'improving') return cap * (1 - 0.6 * t);
+    if (info.pattern === 'intervention') {
+      const interventionT = info.day / (HISTORY_DAYS - 1);
+      if (t <= interventionT) return cap * (interventionT === 0 ? 1 : t / interventionT);
+      const postT = (t - interventionT) / (1 - interventionT);
+      return cap * (1 - postT * 0.75);
+    }
+    return 0;
+  }
+
+  // The chronic-burden floor (riskBase) also needs to move with the
+  // narrative, not stay fixed at today's value — otherwise it swamps the
+  // whole trend on early low-severity days and flattens the story.
+  function floorMultiplierAtDay(t, info) {
+    if (info.pattern === 'stable') return 1;
+    if (info.pattern === 'decline') return 0.55 + 0.45 * t; // ramps up to today's full riskBase
+    if (info.pattern === 'improving') return 1 - 0.4 * t;   // starts at full, eases down
+    if (info.pattern === 'intervention') {
+      const interventionT = info.day / (HISTORY_DAYS - 1);
+      if (t <= interventionT) return 0.55 + 0.45 * (interventionT === 0 ? 1 : t / interventionT);
+      const postT = (t - interventionT) / (1 - interventionT);
+      return 1 - postT * 0.35; // improves after intervention, doesn't fully return to baseline
+    }
+    return 1;
+  }
+
+  function backfillHistory(p) {
+    const info = HISTORY_PATTERNS[p.id] || { pattern: 'stable' };
+    const b = p.baselineVitals;
+    const cap = p.severityCap != null ? p.severityCap : (p.deteriorating ? 0.5 : 0);
+    const now = Date.now();
+    const dayMs = 86400000;
+    const entries = [];
+    let lastVitals = null;
+    for (let d = HISTORY_DAYS - 1; d >= 0; d--) {
+      const t = 1 - d / (HISTORY_DAYS - 1); // 0 at oldest day, 1 at today
+      const sev = severityAtDay(cap, t, info);
+      const v = {};
+      function val(key, worstDelta, noise, round) {
+        if (b[key] == null) { v[key] = null; return; }
+        const target = b[key] + worstDelta * sev;
+        const n = target + (Math.random() - 0.5) * 2 * noise;
+        v[key] = round ? Math.round(n) : Math.round(n * 10) / 10;
+      }
+      // Noise kept modest relative to live-tick noise — this backfill is
+      // meant to read as a clear trend line, not minute-to-minute jitter.
+      val('sbp', 26, 1.5, true); val('dbp', 14, 1, true); val('hr', 16, 1.5, true);
+      val('spo2', -7, 0.5, true); val('weight', 7, 0.25, false); val('glucose', 65, 6, true);
+      val('rr', 7, 0.75, true); val('temp', 0.8, 0.08, false);
+      val('potassium', 0.9, 0.08, false); val('fev1pct', -16, 1, true); val('egfr', -16, 0.5, true);
+      v.consciousness = 'alert'; v.supplementalO2 = v.spo2 != null && v.spo2 < 88;
+      const scored = scoreVitals(p.conditions, v, {
+        riskBase: p.riskBase * floorMultiplierAtDay(t, info), baselineWeight: p.baselineWeight, adherence: p.adherence, age: p.age
+      });
+      entries.push(Object.assign({ ts: now - d * dayMs, riskScore: scored.score }, v));
+      lastVitals = v;
+    }
+    p.history = entries;
+    p.historyPattern = info.pattern;
+    if (info.note) p.interventionNote = 'Day ' + info.day + ': ' + info.note;
+    // Carry the narrative's ending point into live state, so ticking
+    // continues smoothly from "today" instead of snapping back to a
+    // severity-0 baseline and discarding the whole backfilled story.
+    p.vitals = Object.assign({}, p.vitals, lastVitals);
+    p.severity = severityAtDay(cap, 1, info);
+    // For intervention/improving patients, the improved state becomes
+    // their new ongoing baseline — a successful intervention genuinely
+    // lowers a patient's classified risk level, not just today's number.
+    // Otherwise live ticking's fallbackComposite would floor back at the
+    // OLD full riskBase and erase the improvement the moment it ticks.
+    if (info.pattern === 'intervention' || info.pattern === 'improving') {
+      const endMult = floorMultiplierAtDay(1, info);
+      p.riskBase = Math.round(p.riskBase * endMult);
+      p.severityCap = Math.round(cap * 0.4 * 100) / 100; // reduced relapse risk, not zero
+      p.deteriorating = false; // stabilized post-intervention
+    }
+  }
+
   function seedState() {
     const now = Date.now();
     const patients = {};
     SEED_PATIENTS.forEach(p => {
       const vitals = Object.assign({}, p.vitals);
-      patients[p.id] = Object.assign({}, p, {
+      const patient = Object.assign({}, p, {
         vitals: vitals,
         baselineVitals: Object.assign({}, p.vitals), // reference point for mean-reverting drift
         severity: 0, // 0-1, how far toward a "bad day" this patient currently is
@@ -77,6 +184,8 @@
         summary: '', topConcern: '', action: '',
         source: 'engine'
       });
+      backfillHistory(patient); // populates p.history with the 16-day narrative trend
+      patients[p.id] = patient;
     });
     return { tick: 0, updatedAt: now, patients: patients };
   }
@@ -159,7 +268,7 @@
     // RPM/telehealth practice of prescribing home O2 below ~88-90%.
     if (v.spo2 != null) v.supplementalO2 = v.spo2 < 88;
     p.history.push(Object.assign({ ts: Date.now() }, v));
-    if (p.history.length > 30) p.history.shift();
+    if (p.history.length > 150) p.history.shift();
   }
 
   // ── NEWS2 (National Early Warning Score 2) ──
@@ -224,49 +333,62 @@
   // this fallback stops recomputing riskScore/er48h/hosp30d/narrative for
   // that patient — vitals and NEWS2 keep evolving underneath, but the
   // authoritative assessment stays Predict AI's until the page resets.
-  function fallbackComposite(p) {
-    const v = p.vitals;
-    const news = { total: p.newsScore, band: p.newsBand };
+  // Pure scoring function — takes conditions/vitals/context, returns the
+  // composite assessment. This is the SAME function production code calls
+  // (via fallbackComposite below), and is also exported on SVEngine so it
+  // can be validated directly against known clinical scenarios.
+  function scoreVitals(conditions, vitals, opts) {
+    opts = opts || {};
+    const v = vitals;
+    const riskBase = opts.riskBase != null ? opts.riskBase : 0;
+    const baselineWeight = opts.baselineWeight != null ? opts.baselineWeight : null;
+    const adherence = opts.adherence || 'yes';
+    const age = opts.age != null ? opts.age : 65;
+
+    const news = computeNEWS2(v);
     let score = clamp(news.total * 7, 0, 75);
 
-    // Condition-specific modifiers (guideline-sourced, layered on top of NEWS2)
-    if (v.glucose != null && p.conditions.includes('DM')) {
+    if (v.glucose != null && conditions.includes('DM')) {
       if (v.glucose > 300) score += 18; else if (v.glucose > 180) score += 8; // ADA Standards of Care
     }
-    if (p.conditions.includes('CHF') && v.weight != null && p.baselineWeight != null) {
-      // Rapid weight gain — standard CHF self-monitoring guidance (AHA)
-      const gain = v.weight - p.baselineWeight;
-      if (gain >= 5) score += 15; else if (gain >= 2) score += 8;
+    if (conditions.includes('CHF') && v.weight != null && baselineWeight != null) {
+      const gain = v.weight - baselineWeight;
+      if (gain >= 5) score += 15; else if (gain >= 2) score += 8; // AHA CHF self-monitoring guidance
     }
-    if (p.conditions.includes('HTN')) {
-      // Hypertension staging — AHA/ACC (2017 guideline, JNC8 lineage), distinct from NEWS2's generic SBP band
-      if (v.sbp >= 180 || v.dbp >= 120) score += 10; // hypertensive crisis
-      else if (v.sbp >= 140 || v.dbp >= 90) score += 5; // Stage 2
+    if (conditions.includes('HTN')) {
+      if (v.sbp >= 180 || v.dbp >= 120) score += 10; // AHA/ACC hypertensive crisis
+      else if (v.sbp >= 140 || v.dbp >= 90) score += 5; // AHA/ACC Stage 2
     }
-    if (p.conditions.includes('CKD') && v.potassium != null) {
-      // Hyperkalemia — KDIGO CKD guideline threshold (>5.5 mEq/L requires intervention)
-      if (v.potassium > 5.5) score += 15; else if (v.potassium > 5.0) score += 7;
+    if (conditions.includes('CKD') && v.potassium != null) {
+      if (v.potassium > 5.5) score += 15; else if (v.potassium > 5.0) score += 7; // KDIGO hyperkalemia
     }
-    if (p.conditions.includes('CKD') && v.egfr != null) {
-      // eGFR staging — KDIGO CKD guideline (the primary value CKD stages are defined by)
-      if (v.egfr < 15) score += 22; else if (v.egfr < 30) score += 12; else if (v.egfr < 45) score += 5;
+    if (conditions.includes('CKD') && v.egfr != null) {
+      if (v.egfr < 15) score += 22; else if (v.egfr < 30) score += 12; else if (v.egfr < 45) score += 5; // KDIGO eGFR staging
     }
-    if (p.conditions.includes('COPD') && v.fev1pct != null) {
-      // FEV1% staging — GOLD 2024 (COPD staging by FEV1%: <30% GOLD4, 30-49% GOLD3)
-      if (v.fev1pct < 30) score += 15; else if (v.fev1pct < 50) score += 8;
+    if (conditions.includes('COPD') && v.fev1pct != null) {
+      if (v.fev1pct < 30) score += 15; else if (v.fev1pct < 50) score += 8; // GOLD FEV1% staging
     }
-    if (p.adherence === 'no') score += 14; else if (p.adherence === 'partial') score += 7;
+    if (adherence === 'no') score += 14; else if (adherence === 'partial') score += 7;
 
-    // Chronic disease burden floor — everyone in an RPM program has a
-    // diagnosed chronic condition, so composite risk never drops below a
-    // level reflecting overall disease severity, even on a good-vitals day.
-    // Acute NEWS2/condition signals above this floor still push it higher.
-    score = Math.max(score, p.riskBase);
+    score = Math.max(score, riskBase); // chronic disease burden floor
     score = clamp(Math.round(score), 5, 98);
     const er = clamp(Math.round(score * 0.45 + (v.spo2 != null && v.spo2 < 92 ? 15 : 0)), 2, 95);
-    const hosp = clamp(Math.round(score * 0.6 + er * 0.25 + Math.max(0, (p.age - 65) * 0.4)), 3, 95);
+    const hosp = clamp(Math.round(score * 0.6 + er * 0.25 + Math.max(0, (age - 65) * 0.4)), 3, 95);
     const det24h = clamp(Math.round(er * 0.55 + score * 0.3), 0, 95);
+    const tier = score >= 65 ? 'high' : score >= 40 ? 'medium' : 'low';
 
+    return { score, er48h: er, hosp30d: hosp, det24h, tier, newsScore: news.total, newsBand: news.band, newsBreakdown: news.breakdown };
+  }
+
+  function fallbackComposite(p) {
+    const v = p.vitals;
+    const result = scoreVitals(p.conditions, v, {
+      riskBase: p.riskBase, baselineWeight: p.baselineWeight, adherence: p.adherence, age: p.age
+    });
+    const news = { total: result.newsScore, band: result.newsBand };
+    const score = result.score, er = result.er48h, hosp = result.hosp30d, det24h = result.det24h;
+
+    p.newsScore = news.total; p.newsBand = news.band; p.newsBreakdown = result.newsBreakdown;
     p.riskScore = score; p.er48h = er; p.hosp30d = hosp; p.det24h = det24h;
     p.topConcern =
       (p.conditions.includes('CKD') && v.potassium > 5.5) ? ('Hyperkalemia K\u207a ' + v.potassium + ' mEq/L (KDIGO threshold >5.5)')
@@ -347,6 +469,7 @@
     tick: tick,
     setDerived: setDerived,
     computeNEWS2: computeNEWS2,
+    scoreVitals: scoreVitals,
     start: start,
     stop: stop,
     STORAGE_KEY: STORAGE_KEY,

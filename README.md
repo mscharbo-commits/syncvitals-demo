@@ -29,6 +29,16 @@ Underneath that hub-and-spoke structure, the composite score is still built in t
 
 This split matters for credibility: the NEWS2 layer is a real, citable, externally validated instrument with genuine U.S. federal deployment; the condition-specific modifiers are guideline-sourced but not independently validated as a combined predictive model.
 
+## Longitudinal history (10-20 day narrative backfill)
+Each patient is seeded with 16 days of history on first load, generated with an actual narrative pattern rather than a flat or purely-random trend — this is what makes trend charts show a real story instead of noise:
+- **Decline** (Margaret Okafor, Diane Morales) — untreated progressive worsening, ending high. Shows why early detection matters.
+- **Intervention** (Robert Chen, Marcus Rivera, Susan Whitfield) — risk rises to a peak on a specific day, a clinical intervention is logged (`p.interventionNote`), and the trend visibly reverses afterward. The improved state becomes the patient's new ongoing baseline — a successful intervention genuinely updates `riskBase`/`severityCap`/`deteriorating`, not just the displayed history, so live ticking continues from where the story left off instead of snapping back.
+- **Improving** (Angela Brooks) — steady improvement since a new diagnosis/treatment start.
+- **Stable** (everyone else) — flat with minor natural variation.
+
+## Clinical validation suite
+`tests/clinical-vignettes.js` + `tests/run-clinical-validation.js` — run with `node tests/run-clinical-validation.js`. Feeds 15 known, guideline-defensible clinical scenarios (5 each of textbook low/medium/high risk) through the actual production scoring function (`SVEngine.scoreVitals`) and grades the result. This validates the real code path, not a reimplementation — re-run after any scoring change to check for regressions. Current result: 13/15 (87%) — two known gaps (isolated hypertensive crisis, and severity-scaling for extreme lab values) are documented as real findings, not smoothed over.
+
 ## AI nutrition plan generation
 The Nurse Portal's "AI Build" nutrition planner (`nutrAIBuild()` in `syncvitals-rpm.html`) calls `/api/nutrition-plan`, a Vercel serverless function that holds the real Anthropic API key and forwards the request. This requires an **`ANTHROPIC_API_KEY`** environment variable set on the Vercel project (Project Settings → Environment Variables). Without it, the function returns an error and the UI automatically falls back to a rule-based offline plan — so the feature degrades gracefully either way, it just won't be true AI-generated content until the key is set.
 
