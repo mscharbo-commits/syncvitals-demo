@@ -7073,6 +7073,20 @@ function nutrRenderAlertBanner(pid) {
 
 // Poll every 60s and update badge counts
 function nutrStartPolling() {
+  // Instant path: the native 'storage' event fires the moment the Nutrition
+  // Portal (or any other same-origin tab) writes a new alert — no waiting
+  // on a timer. This is the same cross-tab mechanism the shared data engine
+  // uses for prediction scores.
+  window.addEventListener('storage', function(e) {
+    if (!e.key || e.key.indexOf('sv_nutr_alert_') !== 0) return;
+    nutrUpdateQueueBadges();
+    const pid = e.key.replace('sv_nutr_alert_', '');
+    const nutrTabEl = document.getElementById('nt-nutrition');
+    if ((activePatientId === pid || _nutrCurrentPid === pid) && nutrTabEl && nutrTabEl.classList.contains('active') && typeof renderNutrAdherence === 'function') {
+      try { renderNutrAdherence(pid); } catch (err) {}
+    }
+  });
+  // Fallback poll in case two portals are open in tabs that predate this load
   setInterval(() => {
     nutrUpdateQueueBadges();
   }, 60000);
