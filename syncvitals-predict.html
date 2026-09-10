@@ -591,6 +591,33 @@ function ingestVitals(pid) {
     r.hemoglobin  = parseFloat(Math.max(6, p.baseVitals.hemoglobin - drift * 0.02 + n() * 0.1).toFixed(1));
   }
 
+  // Overlay the shared engine's canonical vitals wherever the two overlap,
+  // so Command Dashboard / Nurse Portal / Predict AI all agree on the same
+  // patient's actual numbers instead of three independently-randomized sets.
+  // Fields the engine doesn't track (hba1c, footscore, peakflow, creatinine,
+  // proteinuria, hemoglobin, etc.) stay locally simulated above.
+  if (window.SVEngine) {
+    const shared = window.SVEngine.loadState();
+    const ep = shared.patients[pid];
+    if (ep) {
+      const sv = ep.vitals;
+      if (sv.sbp != null) r.sbp = sv.sbp;
+      if (sv.dbp != null) r.dbp = sv.dbp;
+      if (sv.hr != null) r.hr = sv.hr;
+      if (sv.spo2 != null) r.spo2 = sv.spo2;
+      if (sv.weight != null) r.weight = sv.weight;
+      if (sv.glucose != null) r.glucose = sv.glucose;
+      if (sv.rr != null) r.rr = sv.rr;
+      if (sv.potassium != null) r.potassium = sv.potassium;
+      if (sv.fev1pct != null) r.fev1pct = sv.fev1pct;
+      r.temp = sv.temp; r.consciousness = sv.consciousness; r.supplementalO2 = sv.supplementalO2;
+      if (p.disease === 'HTN' && r.sbp != null && r.dbp != null) {
+        r.map = Math.round((r.sbp + 2 * r.dbp) / 3);
+        r.pulse = r.sbp - r.dbp;
+      }
+    }
+  }
+
   s.readings.push(r);
   if (s.readings.length > 24) s.readings.shift();
   return r;
@@ -679,52 +706,53 @@ function detectAnomalies(pid) {
 }
 
 // ═══════════════════════════════════════════════════════
-// RISK SCORING — disease-weighted model
+// RISK SCORING — NEWS2 core (shared with Command Dashboard / Nurse Portal
+// via SVEngine.computeNEWS2) + disease-specific lab/clinical factors that
+// NEWS2 doesn't see (HbA1c, foot score, CGM score, peak flow, exacerbation
+// count, eGFR, creatinine, proteinuria, hemoglobin, adherence). Vitals that
+// NEWS2 already scores (SBP, SpO2, HR, RR) are intentionally NOT re-added
+// here to avoid double-counting the same signal twice.
 // ═══════════════════════════════════════════════════════
 function scoreRisk(pid) {
   const s = state[pid], p = s.profile;
   if (!s.readings.length) return s.riskScore;
   const r = s.readings[s.readings.length - 1];
-  let score = p.riskBase;
+
+  const news = window.SVEngine ? window.SVEngine.computeNEWS2(r) : { total: 0, band: 'low' };
+  let score = Math.min(75, news.total * 7);
 
   if (p.disease === 'HF') {
+    // AHA CHF self-monitoring guidance — rapid weight gain
     const wg = r.weight - p.baseVitals.weight;
-    score += wg >= 5 ? 25 : wg >= 3 ? 12 : wg >= 1 ? 4 : 0;
-    score += r.spo2 < 90 ? 20 : r.spo2 < 93 ? 10 : r.spo2 < 95 ? 4 : 0;
-    score += r.sbp > 180 ? 18 : r.sbp > 160 ? 8 : 0;
-    score += r.hr > 110 ? 12 : r.hr > 95 ? 5 : 0;
-    score += r.rr > 24 ? 10 : r.rr > 20 ? 4 : 0;
+    score += wg >= 5 ? 15 : wg >= 3 ? 8 : wg >= 1 ? 3 : 0;
   } else if (p.disease === 'COPD') {
-    score += r.spo2 < 88 ? 25 : r.spo2 < 90 ? 15 : r.spo2 < 93 ? 6 : 0;
-    score += r.fev1pct < 30 ? 20 : r.fev1pct < 50 ? 10 : r.fev1pct < 65 ? 4 : 0;
-    score += r.peakflow < 150 ? 15 : r.peakflow < 200 ? 8 : 0;
-    score += r.rr > 26 ? 12 : r.rr > 22 ? 5 : 0;
+    // GOLD 2024 — FEV1% staging + peak flow / exacerbation history
+    score += r.fev1pct < 30 ? 15 : r.fev1pct < 50 ? 8 : 0;
+    score += r.peakflow < 150 ? 12 : r.peakflow < 200 ? 6 : 0;
     score += r.exacerbations >= 3 ? 10 : r.exacerbations >= 2 ? 5 : 0;
   } else if (p.disease === 'DM') {
-    score += r.glucose > 250 ? 20 : r.glucose > 180 ? 8 : r.glucose < 70 ? 22 : 0;
-    score += r.hba1c > 10 ? 20 : r.hba1c > 8 ? 10 : r.hba1c > 7 ? 4 : 0;
-    score += r.cgscore < 50 ? 15 : r.cgscore < 60 ? 8 : 0;
-    score += r.footscore < 5 ? 15 : r.footscore < 7 ? 5 : 0;
-    score += r.sbp > 140 ? 8 : 0;
+    // ADA Standards of Care — glucose/HbA1c targets + CGM time-in-range + foot risk
+    score += r.glucose > 250 ? 18 : r.glucose > 180 ? 8 : r.glucose < 70 ? 20 : 0;
+    score += r.hba1c > 10 ? 18 : r.hba1c > 8 ? 10 : r.hba1c > 7 ? 4 : 0;
+    score += r.cgscore < 50 ? 12 : r.cgscore < 60 ? 6 : 0;
+    score += r.footscore < 5 ? 12 : r.footscore < 7 ? 4 : 0;
   } else if (p.disease === 'HTN') {
-    score += r.sbp >= 180 ? 25 : r.sbp >= 160 ? 15 : r.sbp >= 140 ? 6 : 0;
-    score += r.dbp >= 110 ? 18 : r.dbp >= 90 ? 8 : 0;
-    score += r.adherence < 60 ? 20 : r.adherence < 80 ? 8 : 0;
-    score += r.map >= 120 ? 15 : r.map >= 107 ? 6 : 0;
+    // AHA/ACC (2017 guideline, JNC8 lineage) — staging + adherence
+    score += r.sbp >= 180 || r.dbp >= 120 ? 10 : r.sbp >= 140 || r.dbp >= 90 ? 5 : 0;
+    score += r.adherence < 60 ? 18 : r.adherence < 80 ? 7 : 0;
   } else if (p.disease === 'CKD') {
-    score += r.egfr < 15 ? 28 : r.egfr < 30 ? 15 : r.egfr < 45 ? 6 : 0;
-    score += r.potassium > 6.0 ? 22 : r.potassium > 5.5 ? 12 : r.potassium < 3.0 ? 18 : 0;
-    score += r.hemoglobin < 9 ? 15 : r.hemoglobin < 10 ? 8 : 0;
-    score += r.sbp >= 160 ? 10 : r.sbp >= 130 ? 4 : 0;
+    // KDIGO CKD guideline — eGFR staging, hyperkalemia, anemia of CKD
+    score += r.egfr < 15 ? 22 : r.egfr < 30 ? 12 : r.egfr < 45 ? 5 : 0;
+    score += r.potassium > 6.0 ? 18 : r.potassium > 5.5 ? 10 : r.potassium < 3.0 ? 15 : 0;
+    score += r.hemoglobin < 9 ? 12 : r.hemoglobin < 10 ? 6 : 0;
   }
 
-  score += s.anomalies.filter(a => a.severity === 'crit').length * 7;
-  score += s.anomalies.filter(a => a.severity === 'warn').length * 2;
+  score += s.anomalies.filter(a => a.severity === 'crit').length * 5;
   score += Math.max(0, (p.age - 60) * 0.2);
-  score = Math.round(s.riskScore * 0.55 + score * 0.45);
-  score = Math.min(99, Math.max(1, score));
+  score = Math.min(99, Math.max(1, Math.round(score)));
   s.riskScore = score;
   s.riskLevel = score >= 70 ? 'crit' : score >= 45 ? 'warn' : 'ok';
+  s.newsScore = news.total; s.newsBand = news.band;
   return score;
 }
 
@@ -860,6 +888,7 @@ function runAIPrediction(pid) {
   if (window.SVEngine) {
     window.SVEngine.setDerived(pid, {
       riskScore: rs, er48h: er, hosp30d: hosp, det24h: det,
+      newsScore: s.newsScore, newsBand: s.newsBand,
       summary, topConcern: top_concern, action, source: 'predict'
     });
   } else {
@@ -923,6 +952,7 @@ async function runCycle() {
 
   setPipe(0,'active','ingesting…');
   document.getElementById('ingestDot').style.background = '#4ade80';
+  if (window.SVEngine) window.SVEngine.tick();
   PATIENTS.forEach(p => ingestVitals(p.id));
   await sleep(400);
   setPipe(0,'done',`✓ ${PATIENTS.length} readings`);
