@@ -199,7 +199,7 @@
         // Schema check: older saved sessions predate baselineVitals/severity
         // (mean-reverting drift) — reseed rather than let them stay pinned
         // at whatever extreme they'd drifted to under the old model.
-        if (firstPatient && firstPatient.baselineVitals) return parsed;
+        if (firstPatient && firstPatient.baselineVitals && firstPatient.historyPattern) return parsed;
       }
     } catch (e) {}
     const fresh = seedState();
