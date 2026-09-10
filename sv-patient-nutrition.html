@@ -691,6 +691,91 @@ function getNutrPlan(pid) {
 }
 
 // ══════════════════════════════════════════════════
+// HISTORY SEEDING
+// Food/activity logs only ever exist if a real person tapped them in —
+// there's no rotating generator for nutrition data like there is for
+// vitals. On a fresh deployment that means trend charts (patient Trends
+// page, and the Nurse Portal's Nutrition Adherence tab) start completely
+// empty. This backfills realistic history once per patient so both sides
+// have daily + historical data to show right away, without ever touching
+// today's entry (which stays live for real demo interaction).
+// ══════════════════════════════════════════════════
+function nutrSeededDeteriorating(pid) {
+  try {
+    const state = window.SVEngine && window.SVEngine.loadState();
+    const ep = state && state.patients && state.patients[pid];
+    if (ep) return !!ep.deteriorating;
+  } catch (e) {}
+  return false; // unknown patients (e.g. P007) default to moderate adherence
+}
+
+function nutrSeedDay(pid, dateStr, violateChance) {
+  const goals = PATIENTS[pid].goals;
+  const jitter = (base, pct) => base * (1 + (Math.random() - 0.5) * 2 * pct);
+  const violate = Math.random() < violateChance;
+
+  function target(goalVal, fallback) {
+    const g = goalVal || fallback;
+    const mult = violate ? (1.05 + Math.random() * 0.35) : (0.55 + Math.random() * 0.4);
+    return Math.max(0, Math.round(jitter(g * mult, 0.08)));
+  }
+
+  const dayTotals = {
+    calories:   target(goals.calories, 1800),
+    sodium:     target(goals.sodium, 2300),
+    potassium:  target(goals.potassium, 3500),
+    protein:    Math.round(jitter(goals.protein || 60, 0.2)),
+    carbs:      Math.round(jitter(goals.carbs || 180, 0.2)),
+    sugar:      target(goals.sugar, 40),
+    fat:        Math.round(jitter(60, 0.25)),
+    phosphorus: goals.phosphorus ? Math.round(jitter(goals.phosphorus, 0.2)) : 0
+  };
+
+  const split = { breakfast: 0.28, lunch: 0.36, dinner: 0.36 };
+  const log = { breakfast: [], lunch: [], dinner: [], snacks: [] };
+  Object.keys(split).forEach(meal => {
+    const f = split[meal];
+    log[meal].push({
+      name: 'Logged meal', grams: 100, baseGrams: 100,
+      cal: Math.round(dayTotals.calories * f), sodium: Math.round(dayTotals.sodium * f),
+      potassium: Math.round(dayTotals.potassium * f), protein: Math.round(dayTotals.protein * f),
+      carbs: Math.round(dayTotals.carbs * f), sugar: Math.round(dayTotals.sugar * f),
+      fat: Math.round(dayTotals.fat * f), phosphorus: Math.round(dayTotals.phosphorus * f)
+    });
+  });
+  saveLog(pid, dateStr, log);
+
+  const steps = Math.round(jitter(violate ? 2200 : 4500, 0.3));
+  saveActs(pid, dateStr, [{
+    type: 'walk', steps: Math.max(300, steps),
+    duration: Math.round(jitter(25, 0.4)),
+    calBurned: Math.round(steps * 0.04)
+  }]);
+}
+
+function nutrSeedHistoryIfEmpty(pid, days) {
+  if (!PATIENTS[pid]) return;
+  days = days || 21;
+  const checkDate = new Date(); checkDate.setDate(checkDate.getDate() - (days - 1));
+  const checkStr = checkDate.toISOString().split('T')[0];
+  if (localStorage.getItem(dateKey(pid, checkStr))) return; // already seeded
+
+  const deteriorating = nutrSeededDeteriorating(pid);
+  const violateChance = deteriorating ? 0.4 : 0.12;
+  for (let i = days; i >= 1; i--) { // stop at 1 — never touch today (i=0)
+    const d = new Date(); d.setDate(d.getDate() - i);
+    const dateStr = d.toISOString().split('T')[0];
+    if (localStorage.getItem(dateKey(pid, dateStr))) continue; // don't overwrite real entries
+    nutrSeedDay(pid, dateStr, violateChance);
+  }
+}
+
+function nutrSeedAllPatients() {
+  Object.keys(PATIENTS).forEach(pid => nutrSeedHistoryIfEmpty(pid, 21));
+}
+document.addEventListener('DOMContentLoaded', nutrSeedAllPatients);
+
+// ══════════════════════════════════════════════════
 // LOGIN
 // ══════════════════════════════════════════════════
 function doLogin() {
