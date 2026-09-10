@@ -380,7 +380,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 
 </style>
 <script src="https://cdn.jsdelivr.net/npm/lightweight-charts@5.0.7/dist/lightweight-charts.standalone.production.js"></script>
-<script src="data-engine.js?v=1789082723"></script>
+<script src="data-engine.js?v=1789083704"></script>
 </head>
 <body>
 
@@ -3786,17 +3786,18 @@ function renderPatientContext(p) {
   const dxChip = document.getElementById('np-chip-dx');
   if (dxChip) dxChip.textContent = '🩺 Dx: ' + icds;
 
-  // ── ESCALATION BOX — driven by actual alert level ──
+  // ── ESCALATION BOX — driven by actual alert level (composite risk score, not BP alone) ──
   const escBox = document.getElementById('np-esc-box');
+  const riskNote = p.riskScore != null ? ('Composite risk score ' + p.riskScore + '/100. ') : '';
   if (escBox) {
     if (al === 'crisis') {
-      escBox.innerHTML = '<div class="sv-esc-box esc-now"><div class="esc-label">🚨 Crisis — escalate to physician immediately</div><div class="esc-text">Current reading ' + bpStr + '. Crisis threshold met. Do not wait for recheck before contacting physician.</div></div>';
+      escBox.innerHTML = '<div class="sv-esc-box esc-now"><div class="esc-label">🚨 Crisis — escalate to physician immediately</div><div class="esc-text">' + riskNote + 'Current reading ' + bpStr + '. Do not wait for recheck before contacting physician.</div></div>';
     } else if (al === 'stage2') {
-      escBox.innerHTML = '<div class="sv-esc-box esc-now"><div class="esc-label">Escalate now — physician call recommended</div><div class="esc-text">Stage 2 reading ' + bpStr + ' for ' + p.name + '. Contact physician within 1 hour per protocol.</div></div>';
+      escBox.innerHTML = '<div class="sv-esc-box esc-now"><div class="esc-label">Escalate now — physician call recommended</div><div class="esc-text">' + riskNote + 'Reading ' + bpStr + ' for ' + p.name + '. Contact physician within 1 hour per protocol.</div></div>';
     } else if (al === 'stage1') {
-      escBox.innerHTML = '<div class="sv-esc-box esc-watch"><div class="esc-label">Monitor — follow-up within 48 hours</div><div class="esc-text">Stage 1 elevated reading ' + bpStr + '. Schedule follow-up. No immediate escalation required.</div></div>';
+      escBox.innerHTML = '<div class="sv-esc-box esc-watch"><div class="esc-label">Monitor — follow-up within 48 hours</div><div class="esc-text">' + riskNote + 'Elevated reading ' + bpStr + '. Schedule follow-up. No immediate escalation required.</div></div>';
     } else {
-      escBox.innerHTML = '<div class="sv-esc-box esc-ok"><div class="esc-label">✓ Vitals within acceptable range</div><div class="esc-text">Current reading ' + bpStr + ' for ' + p.name + '. No escalation required. Continue current care plan.</div></div>';
+      escBox.innerHTML = '<div class="sv-esc-box esc-ok"><div class="esc-label">✓ Vitals within acceptable range</div><div class="esc-text">' + riskNote + 'Current reading ' + bpStr + ' for ' + p.name + '. No escalation required. Continue current care plan.</div></div>';
     }
   }
 
@@ -4049,7 +4050,7 @@ function renderTrendChart(p) {
 
   ensureTrendChart();
   if (_trendChart) {
-    chartEl.innerHTML = ''; // clear any prior "No history yet" fallback text
+    chartEl.innerHTML = ''; // clear any prior fallback content
     const toTime = ts => new Date(ts).toISOString().slice(0, 10);
     _trendSbpSeries.setData(history.filter(h => h.sbp != null).map(h => ({ time: toTime(h.ts), value: h.sbp })));
     _trendDbpSeries.setData(history.filter(h => h.dbp != null).map(h => ({ time: toTime(h.ts), value: h.dbp })));
@@ -4059,6 +4060,25 @@ function renderTrendChart(p) {
     // actually laid out the now-visible container.
     requestAnimationFrame(refreshTrendChartSize);
     setTimeout(refreshTrendChartSize, 150);
+  } else {
+    // Reliable fallback — no external CDN dependency, so this always
+    // renders even if jsdelivr is blocked, offline, or slow to load.
+    const minVal = Math.min(...sbpValues) - 10;
+    const maxVal = Math.max(...sbpValues) + 10;
+    const range = maxVal - minVal || 1;
+    function barColor(sbp) {
+      if (sbp >= 180) return '#E24B4A';
+      if (sbp >= 160) return '#F09595';
+      if (sbp >= 140) return '#FAC775';
+      if (sbp >= 130) return '#A8C8EC';
+      return '#1D9E75';
+    }
+    chartEl.innerHTML = '<div class="sv-trend" style="height:100%">' + history.map(h => {
+      if (!h.sbp) return '';
+      const heightPct = Math.round(((h.sbp - minVal) / range) * 100);
+      const dateStr = new Date(h.ts).toLocaleDateString('en-US', {month:'short', day:'numeric'});
+      return `<div class="sv-bar" style="height:${Math.max(heightPct, 8)}%;background:${barColor(h.sbp)}" title="${dateStr}: ${h.sbp} mmHg"></div>`;
+    }).join('') + '</div>';
   }
 
   // Subtitle
