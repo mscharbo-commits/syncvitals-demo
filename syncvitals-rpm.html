@@ -7616,7 +7616,8 @@ async function nutrAIBuild() {
     _nutrRenderPlan(plan);
     const savedDiv = document.getElementById('nutr-saved-plan');
     if (savedDiv) savedDiv.style.display = '';
-    resultEl.innerHTML = '';
+    resultEl.innerHTML = '<div style="text-align:center;padding:10px;color:#27500A;font-size:12px">✅ Plan generated — see \u201cActive Nutrition Plan\u201d below</div>';
+    if (savedDiv) savedDiv.scrollIntoView({ behavior: 'smooth', block: 'start' });
     _nutrShowToast('✅ Nutrition plan saved for ' + p.name);
   } catch(err) {
     const plan = _nutrRuleBasedPlan(p, framework, caloriesSel, strict, activity);
@@ -7624,7 +7625,8 @@ async function nutrAIBuild() {
     _nutrSavePlan(_nutrCurrentPid, plan); _nutrRenderPlan(plan);
     const savedDiv = document.getElementById('nutr-saved-plan');
     if (savedDiv) savedDiv.style.display = '';
-    resultEl.innerHTML = '';
+    resultEl.innerHTML = '<div style="text-align:center;padding:10px;color:#633806;font-size:12px">✅ Plan generated offline — see \u201cActive Nutrition Plan\u201d below</div>';
+    if (savedDiv) savedDiv.scrollIntoView({ behavior: 'smooth', block: 'start' });
     _nutrShowToast('✅ Nutrition plan saved (offline mode) for ' + p.name);
   }
 }
