@@ -3002,7 +3002,7 @@ let svPatients = [
   },,
   {
     id: 'P007', mrn: '00831', name: 'Carlos Mendez', age: 58,
-    conditions: ['Diabetes','HTN'], nurse: 'Nurse R. Santos',
+    conditions: ['DM','HTN'], nurse: 'Nurse R. Santos',
     hasDiabetes: true, hasCHF: false,
     lastVitals: { sbp: 148, dbp: 88, hr: 78, spo2: 98, weight: 196, temp: 98.6,
                   glucose: 218, hba1c: 8.4, sodium: 1950 },
@@ -3021,8 +3021,107 @@ let svPatients = [
     avoid: 'Fruit juices, white bread, sugary beverages, white rice, processed snacks (high glycemic)',
     recommend: 'Oatmeal, leafy greens, grilled chicken, apples, brown rice, olive oil, berries',
     baseVitals: { glucose:218, hba1c:8.4, sbp:148, dbp:88, bmi:31.2, ldl:118, egfr:72, creatinine:1.1, adherence:60 }
-  }
-];
+  },
+  {
+    id: 'P008', mrn: '00844', name: 'Linda Park', age: 66,
+    conditions: ['COPD'], nurse: 'Nurse R. Santos',
+    hasDiabetes: false, hasCHF: false,
+    lastVitals: { sbp: 124, dbp: 76, hr: 76, spo2: 95, weight: 142, temp: 98.4, glucose: null, hba1c: null, sodium: 2000 },
+    baselineWeight: 142, symptoms: ['Occasional cough'], adherence: 'yes', alertLevel: 'stable', carePlanPhase: 30,
+    vitalHistory: [
+      { ts: Date.now() - 86400000*3, sbp:130, dbp:79 },
+      { ts: Date.now() - 86400000*2, sbp:128, dbp:78 },
+      { ts: Date.now() - 86400000*1, sbp:126, dbp:77 },
+      { ts: Date.now() - 86400000*0, sbp:124, dbp:76 }
+    ],
+    notes: 'COPD GOLD I · Tiotropium daily · rescue inhaler PRN, rarely used · non-smoker 4yr · stable on current regimen',
+    disease: 'COPD', riskBase: 32, deteriorating: false, initials: 'LP',
+    dx: 'COPD GOLD I, Well-Controlled',
+    goals: { calories:2000, sodium:2300, potassium:4700, protein:70, carbs:225, fluid:2000, phosphorus:null, sugar:36 },
+    avoid: 'Carbonated drinks, gas-forming foods (beans, cabbage), large meals before activity',
+    recommend: 'Small frequent meals, lean protein, omega-3 rich fish, high-fiber vegetables',
+    baseVitals: { fev1pct:68, spo2:95, sbp:124, dbp:76, bmi:24.1, peakflow:310, adherence:88 }
+  },
+  {
+    id: 'P009', mrn: '00855', name: 'Harold Jenkins', age: 70,
+    conditions: ['CKD'], nurse: 'Nurse T. Alvarez',
+    hasDiabetes: false, hasCHF: false,
+    lastVitals: { sbp: 130, dbp: 80, hr: 72, spo2: 97, weight: 178, temp: 98.2, glucose: null, hba1c: null, sodium: 2400 },
+    baselineWeight: 178, symptoms: ['None reported'], adherence: 'yes', alertLevel: 'stable', carePlanPhase: 30,
+    vitalHistory: [
+      { ts: Date.now() - 86400000*3, sbp:136, dbp:83 },
+      { ts: Date.now() - 86400000*2, sbp:134, dbp:82 },
+      { ts: Date.now() - 86400000*1, sbp:132, dbp:81 },
+      { ts: Date.now() - 86400000*0, sbp:130, dbp:80 }
+    ],
+    notes: 'CKD Stage 2 · secondary to longstanding HTN · ACE inhibitor · annual nephrology follow-up · eGFR stable x 6mo',
+    disease: 'CKD', riskBase: 28, deteriorating: false, initials: 'HJ',
+    dx: 'CKD Stage 2, Stable',
+    goals: { calories:2000, sodium:2000, potassium:3000, protein:60, carbs:225, fluid:2000, phosphorus:900, sugar:36 },
+    avoid: 'Processed/cured meats, dark colas, bananas/oranges in excess, added salt',
+    recommend: 'Fresh vegetables (low-K prepared), lean poultry, olive oil, white rice, apples',
+    baseVitals: { egfr:68, creatinine:1.2, sbp:130, dbp:80, potassium:4.4, proteinuria:45, hemoglobin:13.1, adherence:90 }
+  },
+  {
+    id: 'P010', mrn: '00867', name: 'Susan Whitfield', age: 67,
+    conditions: ['CHF'], nurse: 'Nurse T. Alvarez',
+    hasDiabetes: false, hasCHF: true,
+    lastVitals: { sbp: 138, dbp: 84, hr: 84, spo2: 95, weight: 169, temp: 98.6, glucose: null, hba1c: null, sodium: 2000 },
+    baselineWeight: 168, symptoms: ['Mild ankle swelling'], adherence: 'partial', alertLevel: 'watch', carePlanPhase: 30,
+    vitalHistory: [
+      { ts: Date.now() - 86400000*3, sbp:132, dbp:81 },
+      { ts: Date.now() - 86400000*2, sbp:134, dbp:82 },
+      { ts: Date.now() - 86400000*1, sbp:136, dbp:83 },
+      { ts: Date.now() - 86400000*0, sbp:138, dbp:84 }
+    ],
+    notes: 'CHF NYHA II · EF 45% · Furosemide 20mg daily · recent mild ankle edema, watching weight trend closely',
+    disease: 'HF', riskBase: 44, deteriorating: true, initials: 'SW',
+    dx: 'CHF NYHA II, Early Decompensation Risk',
+    goals: { calories:1800, sodium:2000, potassium:4700, protein:65, carbs:200, fluid:1900, phosphorus:null, sugar:30 },
+    avoid: 'Canned soups, deli meats, frozen dinners, salted snacks, added salt at the table',
+    recommend: 'Fresh/frozen (no-salt) vegetables, herbs for flavor, lean protein, low-sodium bread',
+    baseVitals: { weight:168, hr:84, sbp:138, dbp:84, spo2:95, rr:18, adherence:70 }
+  },
+  {
+    id: 'P011', mrn: '00879', name: 'David Kim', age: 45,
+    conditions: ['HTN'], nurse: 'Nurse R. Santos',
+    hasDiabetes: false, hasCHF: false,
+    lastVitals: { sbp: 128, dbp: 82, hr: 70, spo2: 99, weight: 185, temp: 98.1, glucose: null, hba1c: null, sodium: 2400 },
+    baselineWeight: 185, symptoms: ['None reported'], adherence: 'yes', alertLevel: 'stable', carePlanPhase: 30,
+    vitalHistory: [
+      { ts: Date.now() - 86400000*3, sbp:134, dbp:85 },
+      { ts: Date.now() - 86400000*2, sbp:132, dbp:84 },
+      { ts: Date.now() - 86400000*1, sbp:130, dbp:83 },
+      { ts: Date.now() - 86400000*0, sbp:128, dbp:82 }
+    ],
+    notes: 'HTN Stage 1 · Amlodipine 5mg · active lifestyle, gym 4x/week · consistently at goal BP',
+    disease: 'HTN', riskBase: 20, deteriorating: false, initials: 'DK',
+    dx: 'HTN Stage 1, Well-Controlled',
+    goals: { calories:2400, sodium:2300, potassium:4700, protein:90, carbs:280, fluid:2500, phosphorus:null, sugar:40 },
+    avoid: 'Excess added salt, processed/fast food, high-sodium condiments',
+    recommend: 'DASH-style plate: vegetables, whole grains, lean protein, low-fat dairy',
+    baseVitals: { sbp:128, dbp:82, hr:70, map:97, pulse:46, adherence:95 }
+  },
+  {
+    id: 'P012', mrn: '00891', name: 'Angela Brooks', age: 54,
+    conditions: ['DM'], nurse: 'Nurse T. Alvarez',
+    hasDiabetes: true, hasCHF: false,
+    lastVitals: { sbp: 134, dbp: 82, hr: 80, spo2: 98, weight: 204, temp: 98.6, glucose: 176, hba1c: 7.6, sodium: 2000 },
+    baselineWeight: 204, symptoms: ['Increased thirst','Fatigue'], adherence: 'partial', alertLevel: 'watch', carePlanPhase: 30,
+    vitalHistory: [
+      { ts: Date.now() - 86400000*3, sbp:128, dbp:79, glucose:167 },
+      { ts: Date.now() - 86400000*2, sbp:130, dbp:80, glucose:170 },
+      { ts: Date.now() - 86400000*1, sbp:132, dbp:81, glucose:173 },
+      { ts: Date.now() - 86400000*0, sbp:134, dbp:82, glucose:176 }
+    ],
+    notes: 'T2DM diagnosed 6 weeks ago · Metformin titrating · still building glucose monitoring habit · diabetes education scheduled',
+    disease: 'DM', riskBase: 38, deteriorating: true, initials: 'AB',
+    dx: 'T2DM, Newly Diagnosed',
+    goals: { calories:1900, sodium:2300, potassium:4700, protein:70, carbs:150, fluid:2000, phosphorus:null, sugar:25 },
+    avoid: 'Sugary beverages, white bread/rice, pastries, fruit juice',
+    recommend: 'Non-starchy vegetables, whole grains, lean protein, nuts in moderation',
+    baseVitals: { glucose:176, hba1c:7.6, sbp:134, dbp:82, bmi:29.8, ldl:110, egfr:88, creatinine:0.9, adherence:65 }
+  },];
 
 // ── SHARED ENGINE SYNC ──
 // Pulls live vitals/history/risk scores from the shared data engine
@@ -3459,6 +3558,8 @@ function renderRegistry(filter) {
   }
   document.getElementById('count-all').textContent = svPatients.length;
   ['crisis','stage2','stable'].forEach(k => { const el = document.getElementById('count-' + k); if(el) el.textContent = c[k]; });
+  const homeCount = document.getElementById('home-stable-count');
+  if (homeCount) homeCount.textContent = svPatients.length + ' patients';
 
   list.innerHTML = shown.map(p => {
     const v = p.lastVitals;

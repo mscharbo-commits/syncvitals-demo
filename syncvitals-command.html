@@ -378,6 +378,24 @@ const PATIENTS = [
   { id:'P006', name:'Marcus Rivera', age:52, dx:'HTN Stage 2 — Non-Adherent',
     conditions:['HTN'], phase:30, vitals:{ sbp:158, dbp:96, hr:88, spo2:98, weight:195, glucose:null },
     adherence:'no', riskBase:52, deteriorating:true },
+  { id:'P007', name:'Carlos Mendez', age:58, dx:'Type 2 Diabetes Mellitus, Hypertension Stage 1',
+    conditions:['DM','HTN'], phase:30, vitals:{ sbp:148, dbp:88, hr:78, spo2:98, weight:196, glucose:218 },
+    adherence:'partial', riskBase:48, deteriorating:false },
+  { id:'P008', name:'Linda Park', age:66, dx:'COPD GOLD I, Well-Controlled',
+    conditions:['COPD'], phase:30, vitals:{ sbp:124, dbp:76, hr:76, spo2:95, weight:142, glucose:null },
+    adherence:'yes', riskBase:32, deteriorating:false },
+  { id:'P009', name:'Harold Jenkins', age:70, dx:'CKD Stage 2, Stable',
+    conditions:['CKD'], phase:30, vitals:{ sbp:130, dbp:80, hr:72, spo2:97, weight:178, glucose:null },
+    adherence:'yes', riskBase:28, deteriorating:false },
+  { id:'P010', name:'Susan Whitfield', age:67, dx:'CHF NYHA II, Early Decompensation Risk',
+    conditions:['CHF'], phase:30, vitals:{ sbp:138, dbp:84, hr:84, spo2:95, weight:169, glucose:null },
+    adherence:'partial', riskBase:44, deteriorating:true },
+  { id:'P011', name:'David Kim', age:45, dx:'HTN Stage 1, Well-Controlled',
+    conditions:['HTN'], phase:30, vitals:{ sbp:128, dbp:82, hr:70, spo2:99, weight:185, glucose:null },
+    adherence:'yes', riskBase:20, deteriorating:false },
+  { id:'P012', name:'Angela Brooks', age:54, dx:'T2DM, Newly Diagnosed',
+    conditions:['DM'], phase:30, vitals:{ sbp:134, dbp:82, hr:80, spo2:98, weight:204, glucose:176 },
+    adherence:'partial', riskBase:38, deteriorating:true },
 ];
 
 // ── ADMISSION HISTORY ──
@@ -430,7 +448,7 @@ function scorePatient(p) {
     else if (v.glucose > 180) anoms.push({ sev:'warn', msg:'Glucose ' + v.glucose + ' — above target (ADA)' });
   }
   if (p.conditions.includes('CHF') && v.weight) {
-    const base = p.id === 'P002' ? 196 : p.id === 'P005' ? 155 : v.weight;
+    const base = p.id === 'P002' ? 196 : p.id === 'P005' ? 155 : p.id === 'P010' ? 168 : v.weight;
     const gain = v.weight - base;
     if (gain >= 5) anoms.push({ sev:'crit', msg:'+' + gain.toFixed(1) + ' lbs — CHF decompensation risk' });
     else if (gain >= 2) anoms.push({ sev:'warn', msg:'+' + gain.toFixed(1) + ' lbs — weight gain' });
