@@ -267,8 +267,19 @@
     // Auto-flag supplemental oxygen once SpO2 is persistently low — mirrors real
     // RPM/telehealth practice of prescribing home O2 below ~88-90%.
     if (v.spo2 != null) v.supplementalO2 = v.spo2 < 88;
-    p.history.push(Object.assign({ ts: Date.now() }, v));
-    if (p.history.length > 150) p.history.shift();
+    // Store at most one entry per calendar day — real BP monitoring is a
+    // handful of readings/day, not one every tick. Without this, a long
+    // demo session floods the array with same-day ticks and eventually
+    // evicts the entire historical backfill via the length cap below.
+    const todayKey = new Date().toISOString().slice(0, 10);
+    const lastEntry = p.history[p.history.length - 1];
+    const lastKey = lastEntry ? new Date(lastEntry.ts).toISOString().slice(0, 10) : null;
+    if (lastKey === todayKey) {
+      p.history[p.history.length - 1] = Object.assign({ ts: Date.now() }, v);
+    } else {
+      p.history.push(Object.assign({ ts: Date.now() }, v));
+    }
+    if (p.history.length > 60) p.history.shift(); // now a 60-DAY safety cap, not a tick cap
   }
 
   // ── NEWS2 (National Early Warning Score 2) ──
