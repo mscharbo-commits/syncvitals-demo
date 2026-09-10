@@ -18,7 +18,7 @@ The composite risk score is no longer an unnamed points system. It's built in tw
    - Selected for inclusion in the **U.S. Department of Veterans Affairs' new nationwide federal Electronic Health Record**.
    - Peer-reviewed validation in a U.S. Veteran population at Kansas City VA Medical Center (4,781 patients, 142,375 NEWS readings, AUC 0.72 for predicting 24h ICU transfer/mortality).
    - Subject of a formal evidence review commissioned directly by the VA's Evidence-based Synthesis Program to guide system-wide implementation.
-2. **Condition-specific modifiers**, layered on top and individually sourced: glucose thresholds from ADA Standards of Care, CHF rapid-weight-gain thresholds from standard AHA self-monitoring guidance, plus a medication-adherence adjustment.
+2. **Condition-specific modifiers**, layered on top and individually sourced: glucose thresholds from ADA Standards of Care (diabetes), CHF rapid-weight-gain thresholds from standard AHA self-monitoring guidance, hypertension staging from AHA/ACC (2017 guideline, JNC8 lineage), hyperkalemia thresholds from KDIGO (CKD), and FEV1% staging from GOLD 2024 (COPD).
 
 This split matters for credibility: the NEWS2 layer is a real, citable, externally validated instrument with genuine U.S. federal deployment; the condition-specific modifiers are guideline-sourced but not independently validated as a combined predictive model. Command Dashboard and Predict AI can enrich a patient's `riskScore`/`er48h`/`hosp30d`/narrative when open, but `newsScore`/`newsBand` always stay engine-computed so the core acuity signal is consistent everywhere.
 
