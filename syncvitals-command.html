@@ -410,135 +410,74 @@ PATIENTS.forEach(p => {
   };
 });
 
-// ── RISK SCORING ──
-// Core acuity layer is NEWS2 (National Early Warning Score 2 — Royal
-// College of Physicians, endorsed by NHS England; also selected for the
-// VA's federal EHR), computed by the shared data engine so every portal
-// uses the identical formula. Condition-specific modifiers below are
-// layered on top and individually guideline-sourced (ADA for glucose,
-// AHA for CHF weight gain and hypertension staging, KDIGO for CKD
-// potassium, GOLD for COPD FEV1%) rather than folded into an unnamed
-// points system.
+// ── ANOMALY DETECTION + DISPLAY SYNC ──
+// Command Dashboard no longer computes its own competing composite risk
+// score. Predict AI is the hub for riskScore/er48h/hosp30d/newsScore/
+// summary/topConcern/action — this function detects informational vitals
+// anomalies for the alerts panel and pipeline visualization, then reads
+// the authoritative assessment from the shared engine for display.
 function scorePatient(p) {
   const s = engineState[p.id];
   const v = p.vitals;
   const anoms = [];
 
-  const news = window.SVEngine ? window.SVEngine.computeNEWS2(v) : { total: 0, band: 'low' };
-  let score = Math.min(75, news.total * 7);
-  if (news.band === 'high') anoms.push({ sev: 'crit', msg: 'NEWS2 ' + news.total + ' — high acuity (RCP escalation threshold)' });
-  else if (news.band === 'medium') anoms.push({ sev: 'warn', msg: 'NEWS2 ' + news.total + ' — medium acuity' });
+  if (v.sbp >= 180 || v.dbp >= 120) anoms.push({ sev: 'crit', msg: 'SBP ' + v.sbp + ' — hypertensive crisis' });
+  else if (v.sbp >= 140 || v.dbp >= 90) anoms.push({ sev: 'warn', msg: 'SBP ' + v.sbp + ' — Stage 2 (AHA/ACC)' });
   if (v.spo2 != null && v.spo2 < 90) anoms.push({ sev: 'crit', msg: 'SpO₂ ' + v.spo2 + '% — hypoxia' });
-
-  // Glucose — ADA Standards of Care thresholds
+  else if (v.spo2 != null && v.spo2 < 94) anoms.push({ sev: 'warn', msg: 'SpO₂ ' + v.spo2 + '% — low' });
   if (v.glucose !== null && p.conditions.includes('DM')) {
-    if (v.glucose > 300) { score += 18; anoms.push({ sev:'crit', msg:'Glucose ' + v.glucose + ' — DKA risk' }); }
-    else if (v.glucose > 180) { score += 8; anoms.push({ sev:'warn', msg:'Glucose ' + v.glucose + ' — above target' }); }
+    if (v.glucose > 300) anoms.push({ sev:'crit', msg:'Glucose ' + v.glucose + ' — DKA risk' });
+    else if (v.glucose > 180) anoms.push({ sev:'warn', msg:'Glucose ' + v.glucose + ' — above target (ADA)' });
   }
-  // CHF weight — standard CHF self-monitoring guidance (AHA)
-  const baselineWeight = p.id === 'P002' ? 196 : p.id === 'P005' ? 155 : v.weight;
   if (p.conditions.includes('CHF') && v.weight) {
-    const gain = v.weight - baselineWeight;
-    if (gain >= 5) { score += 15; anoms.push({ sev:'crit', msg:'+' + gain.toFixed(1) + ' lbs — CHF decompensation risk' }); }
-    else if (gain >= 2) { score += 8; anoms.push({ sev:'warn', msg:'+' + gain.toFixed(1) + ' lbs — weight gain' }); }
+    const base = p.id === 'P002' ? 196 : p.id === 'P005' ? 155 : v.weight;
+    const gain = v.weight - base;
+    if (gain >= 5) anoms.push({ sev:'crit', msg:'+' + gain.toFixed(1) + ' lbs — CHF decompensation risk' });
+    else if (gain >= 2) anoms.push({ sev:'warn', msg:'+' + gain.toFixed(1) + ' lbs — weight gain' });
   }
-  // Hypertension staging — AHA/ACC (2017 guideline, JNC8 lineage)
-  if (p.conditions.includes('HTN')) {
-    if (v.sbp >= 180 || v.dbp >= 120) { score += 10; anoms.push({ sev:'crit', msg:'SBP ' + v.sbp + ' — hypertensive crisis (AHA/ACC)' }); }
-    else if (v.sbp >= 140 || v.dbp >= 90) { score += 5; anoms.push({ sev:'warn', msg:'SBP ' + v.sbp + ' — Stage 2 (AHA/ACC)' }); }
+  if (p.conditions.includes('CKD') && v.potassium != null && v.potassium > 5.0) {
+    anoms.push({ sev: v.potassium > 5.5 ? 'crit' : 'warn', msg:'K⁺ ' + v.potassium + ' — hyperkalemia trend (KDIGO)' });
   }
-  // Hyperkalemia — KDIGO CKD guideline threshold
-  if (p.conditions.includes('CKD') && v.potassium != null) {
-    if (v.potassium > 5.5) { score += 15; anoms.push({ sev:'crit', msg:'K⁺ ' + v.potassium + ' — hyperkalemia (KDIGO)' }); }
-    else if (v.potassium > 5.0) { score += 7; anoms.push({ sev:'warn', msg:'K⁺ ' + v.potassium + ' — trending high (KDIGO)' }); }
+  if (p.conditions.includes('COPD') && v.fev1pct != null && v.fev1pct < 50) {
+    anoms.push({ sev: v.fev1pct < 30 ? 'crit' : 'warn', msg:'FEV₁ ' + v.fev1pct + '% — GOLD Stage ' + (v.fev1pct < 30 ? 'IV' : 'III') });
   }
-  // eGFR staging — KDIGO CKD guideline
-  if (p.conditions.includes('CKD') && v.egfr != null) {
-    if (v.egfr < 15) { score += 22; anoms.push({ sev:'crit', msg:'eGFR ' + v.egfr + ' — KDIGO Stage 5/ESRD' }); }
-    else if (v.egfr < 30) { score += 12; anoms.push({ sev:'warn', msg:'eGFR ' + v.egfr + ' — KDIGO Stage 4' }); }
-    else if (v.egfr < 45) { score += 5; }
-  }
-  // FEV1% staging — GOLD 2024
-  if (p.conditions.includes('COPD') && v.fev1pct != null) {
-    if (v.fev1pct < 30) { score += 15; anoms.push({ sev:'crit', msg:'FEV₁ ' + v.fev1pct + '% — GOLD Stage IV' }); }
-    else if (v.fev1pct < 50) { score += 8; anoms.push({ sev:'warn', msg:'FEV₁ ' + v.fev1pct + '% — GOLD Stage III' }); }
-  }
-  // Adherence
-  if (p.adherence === 'no') score += 14;
-  else if (p.adherence === 'partial') score += 7;
-
-  score = Math.max(0, Math.min(99, Math.round(score)));
-  s.riskScore = score;
-  s.riskLevel = score >= 60 ? 'crit' : score >= 40 ? 'warn' : 'ok';
-  s.newsScore = news.total; s.newsBand = news.band;
   s.anomalies = anoms;
 
+  // Read the authoritative assessment from the shared engine (Predict AI's
+  // push, or the engine's own NEWS2-only fallback if Predict AI hasn't run
+  // for this patient yet).
+  const shared = window.SVEngine ? window.SVEngine.loadState() : null;
+  const sp = shared && shared.patients[p.id];
+  if (sp) {
+    s.riskScore = sp.riskScore; s.er48h = sp.er48h; s.hosp30d = sp.hosp30d; s.det24h = sp.det24h;
+    s.newsScore = sp.newsScore; s.newsBand = sp.newsBand;
+    s.summary = sp.summary; s.topConcern = sp.topConcern; s.action = sp.action;
+    s.assessmentSource = sp.source; // 'predict' = Predict AI hub, 'engine' = fallback awaiting Predict AI
+  }
+  s.riskLevel = s.riskScore >= 60 ? 'crit' : s.riskScore >= 40 ? 'warn' : 'ok';
+
   // Alert on high score
-  if (score >= 65 && score > (s._lastAlert || 0)) {
-    alerts.unshift({ sev:'crit', pid:p.id, name:p.name, msg:anoms[0]?.msg || 'Risk score ' + score, ts:new Date().toLocaleTimeString() });
-    s._lastAlert = score;
+  if (s.riskScore >= 65 && s.riskScore > (s._lastAlert || 0)) {
+    alerts.unshift({ sev:'crit', pid:p.id, name:p.name, msg:anoms[0]?.msg || 'Risk score ' + s.riskScore, ts:new Date().toLocaleTimeString() });
+    s._lastAlert = s.riskScore;
     if (alerts.length > 20) alerts.pop();
   }
 }
 
-// ── AI PREDICTION (for highest-risk patient) ──
+// ── AI CLINICAL NARRATIVE (display only) ──
+// Builds the narrative panel from whichever assessment is currently
+// authoritative (Predict AI's push, or the engine's fallback) — Command
+// Dashboard does not compute or push its own competing narrative anymore.
 function runAI(p) {
-  // Rule-based — no API key needed. Swap for fetch call in production.
-  const s   = engineState[p.id];
-  const rs  = s.riskScore;
-  const v   = p.vitals;
-  const crit = s.anomalies.filter(a=>a.sev==='crit').length;
-
-  // These are already computed in the cycle — just build the prediction object
-  const er   = s.er48h   || 0;
-  const hosp = s.hosp30d || 0;
-  const det  = Math.min(95, Math.round(er * 0.55 + rs * 0.3 + crit * 5));
-
-  const intervention = er >= 60 || rs >= 75 ? 'Immediate' :
-                       er >= 40 || rs >= 60 ? 'Within 4h' :
-                       er >= 25 || rs >= 45 ? 'Within 24h' :
-                       rs >= 30             ? 'Routine' : 'None';
-
-  const trend = p.deteriorating && rs >= 60 ? 'Deteriorating' :
-                p.deteriorating             ? 'Stable-Watch' :
-                rs < 35                     ? 'Improving' : 'Stable';
-
-  const topAnom = s.anomalies[0]?.msg || null;
-  const riskWord = rs >= 70 ? 'high' : rs >= 45 ? 'moderate' : 'low';
-
-  const summary = p.name.split(' ')[0] + ' (' + p.dx + ') shows ' + riskWord +
-    ' risk (score ' + rs + '/100). ' +
-    (topAnom ? 'Key concern: ' + topAnom + '. ' : '') +
-    'ER visit probability 48h: ' + er + '%. Hospital admission 30d: ' + hosp + '%. Trend: ' + trend + '.';
-
-  const top_concern = topAnom ||
-    (er >= 50 ? 'High ER risk — ' + er + '% in 48h' :
-     hosp >= 50 ? 'Elevated admission risk — ' + hosp + '%' :
-     'Monitor ' + p.dx + ' parameters');
-
-  const action = intervention === 'Immediate' ? 'Contact physician now' :
-                 intervention === 'Within 4h'  ? 'Notify physician within 4 hours' :
-                 intervention === 'Within 24h' ? 'Schedule urgent review within 24h' :
-                 'Continue monitoring per care plan';
-
-  s.prediction = { er_visit_48h:er, hospital_admission_30d:hosp,
-    deterioration_24h:det, intervention, trend, summary, top_concern, action };
+  const s = engineState[p.id];
+  s.prediction = {
+    er_visit_48h: s.er48h, hospital_admission_30d: s.hosp30d, deterioration_24h: s.det24h,
+    intervention: s.riskScore >= 70 ? 'Immediate' : s.riskScore >= 45 ? 'Within 4h' : 'Routine',
+    trend: p.deteriorating ? 'Deteriorating' : 'Stable',
+    summary: s.summary, top_concern: s.topConcern, action: s.action
+  };
   s.predUpdated = new Date().toLocaleTimeString();
-
-  if (window.SVEngine) {
-    window.SVEngine.setDerived(p.id, {
-      riskScore: rs, er48h: er, hosp30d: hosp, det24h: det,
-      newsScore: s.newsScore, newsBand: s.newsBand,
-      summary, topConcern: top_concern, action, source: 'command'
-    });
-  } else {
-    try {
-      localStorage.setItem('sv_pred_' + p.id, JSON.stringify({
-        riskScore:rs, er48h:er, hosp30d:hosp, det24h:det,
-        summary, top_concern, action, ts:Date.now()
-      }));
-    } catch(e) {}
-  }
+  s.predSource = s.assessmentSource === 'predict' ? 'Predict AI' : 'Awaiting Predict AI (NEWS2-only baseline)';
 }
 
 
@@ -560,65 +499,17 @@ async function runCycle() {
     });
   }
 
-  // Score all patients
+  // Score all patients (anomaly detection + read authoritative assessment)
   PATIENTS.forEach(p => scorePatient(p));
   setPipe(0,'done'); setPipe(1,'done'); setPipe(2,'done');
 
-  // Score-based ER/Hospital prediction for ALL patients (rule-based, no API)
+  // Build the narrative display from whichever assessment is currently
+  // authoritative — no computation or push happens here anymore.
   setPipe(3,'active');
-  PATIENTS.forEach(p => {
-    const s = engineState[p.id];
-    const rs = s.riskScore;
-    const adh = p.adherence === 'yes' ? 88 : p.adherence === 'partial' ? 58 : 30;
-    // ER risk 48h
-    let er = Math.round(rs * 0.45 + (s.anomalies.filter(a=>a.sev==='crit').length * 8));
-    er += p.deteriorating ? 10 : 0;
-    er += p.vitals.spo2 && p.vitals.spo2 < 92 ? 20 : 0;
-    er += p.vitals.sbp  && p.vitals.sbp >= 180 ? 18 : 0;
-    er += p.conditions.includes('CHF') && p.vitals.weight > (p.baselineWeight||p.vitals.weight) + 4 ? 20 : 0;
-    er  = Math.min(95, Math.max(2, er));
-    // Hospital 30d
-    let hosp = Math.round(rs * 0.6 + er * 0.25 + Math.max(0,(p.age-65)*0.4));
-    hosp += adh < 60 ? 12 : 0;
-    hosp  = Math.min(95, Math.max(3, hosp));
-    if (er < 25 && hosp > er + 35) hosp = Math.round(er + 35);
-    s.er48h   = er;
-    s.hosp30d = hosp;
-    // Push to the shared engine so RPM / Predict AI see Command's scores live
-    if (window.SVEngine) {
-      window.SVEngine.setDerived(p.id, {
-        riskScore: rs, er48h: er, hosp30d: hosp,
-        newsScore: s.newsScore, newsBand: s.newsBand,
-        source: 'command'
-      });
-    } else {
-      try {
-        const existing = JSON.parse(localStorage.getItem('sv_pred_' + p.id) || '{}');
-        localStorage.setItem('sv_pred_' + p.id, JSON.stringify({
-          ...existing, riskScore: rs, er48h: er, hosp30d: hosp, ts: Date.now()
-        }));
-      } catch(e) {}
-    }
-  });
-  // AI call for highest-risk patient (for clinical narrative — uses API if key set)
-  const sorted = [...PATIENTS].sort((a,b)=>
-    engineState[b.id].riskScore - engineState[a.id].riskScore);
-  const target = sorted[cycle % sorted.length];
-  if (engineState[target.id].riskScore >= 40) {
-    try { runAI(target); } catch(e) {}
-  }
+  PATIENTS.forEach(p => runAI(p));
   setPipe(3,'done');
 
   setPipe(4,'done');
-  // Write risk scores to localStorage for RPM to read
-  PATIENTS.forEach(p => {
-    try {
-      const existing = JSON.parse(localStorage.getItem('sv_pred_' + p.id) || '{}');
-      existing.riskScore = engineState[p.id].riskScore;
-      existing.ts = Date.now();
-      localStorage.setItem('sv_pred_' + p.id, JSON.stringify(existing));
-    } catch(e) {}
-  });
   renderAll();
   document.getElementById('cycle-badge').textContent = 'Cycle ' + cycle;
   document.getElementById('last-update').textContent = 'Updated ' + new Date().toLocaleTimeString();
@@ -742,6 +633,7 @@ function renderPatientList() {
         ${s.anomalies.length===0&&er===0&&ad===0?`<span class="tag ok">✓ Stable</span>`:''}
       </div>
       ${pr?.summary?`<div class="pt-ai">${pr.summary}</div>`:''}
+      ${s.predSource?`<div style="font-size:9px;color:#999;margin-top:2px">${s.assessmentSource==='predict'?'✓ ':'⏳ '}${s.predSource}</div>`:''}
       <div class="pt-actions">
         <button class="pt-btn primary" onclick="event.stopPropagation();openRPMPatient('${p.id}')">📋 Care Plan</button>
         <button class="pt-btn secondary" onclick="event.stopPropagation();openPredPatient('${p.id}')">🧠 Prediction AI</button>

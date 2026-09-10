@@ -977,6 +977,27 @@ async function runCycle() {
 
   setPipe(2,'active','scoring…');
   PATIENTS.forEach(p => scoreRisk(p.id));
+  // Predict AI is the hub: push every patient's assessment now, not just the
+  // subset that gets a full AI narrative below. That richer narrative
+  // overwrites this with better summary/action text when it runs, but every
+  // patient becomes Predict-AI-authoritative on the very first cycle.
+  if (window.SVEngine) {
+    PATIENTS.forEach(p => {
+      const s = state[p.id];
+      const topAnom = s.anomalies && s.anomalies[0] ? s.anomalies[0].msg : null;
+      window.SVEngine.setDerived(p.id, {
+        riskScore: s.riskScore,
+        newsScore: s.newsScore, newsBand: s.newsBand,
+        er48h: Math.round(s.riskScore * 0.45),
+        hosp30d: Math.round(s.riskScore * 0.6),
+        det24h: Math.round(s.riskScore * 0.35),
+        topConcern: topAnom || (s.riskLevel === 'crit' ? 'Elevated risk — full analysis pending' : 'Stable'),
+        summary: p.name.split(' ')[0] + ' (' + p.dx + ') — risk ' + s.riskScore + '/100 (' + s.riskLevel.toUpperCase() + ')',
+        action: s.riskScore >= 70 ? 'Contact physician now' : s.riskScore >= 45 ? 'Notify physician within 4 hours' : 'Continue monitoring per care plan',
+        source: 'predict'
+      });
+    });
+  }
   await sleep(300);
   const crits = Object.values(state).filter(s => s.riskLevel === 'crit').length;
   setPipe(2, crits > 0 ? 'warn' : 'done', `✓ ${crits} critical`);

@@ -6658,10 +6658,10 @@ function renderPredScores(p) {
       'padding:10px 14px;margin-bottom:12px;color:#fff;display:flex;align-items:center;gap:10px">' +
       '<span style="font-size:16px">🧠</span>' +
       '<div style="flex:1"><div style="font-size:12px;font-weight:700">AI Prediction Engine</div>' +
-      '<div style="font-size:11px;opacity:0.7">Open Command Dashboard to activate live risk scores</div></div>' +
-      '<button onclick="window.open(\'syncvitals-command.html\',\'sv_command\')" ' +
+      '<div style="font-size:11px;opacity:0.7">Open Predict AI for a full clinical assessment</div></div>' +
+      '<button onclick="window.open(\'syncvitals-predict.html\',\'sv_predict\')" ' +
         'style="background:rgba(255,255,255,0.2);border:0.5px solid rgba(255,255,255,0.3);' +
-        'color:#fff;border-radius:8px;padding:4px 10px;font-size:11px;cursor:pointer">Open Command</button>' +
+        'color:#fff;border-radius:8px;padding:4px 10px;font-size:11px;cursor:pointer">Open Predict AI</button>' +
       '</div>';
     return;
   }
@@ -6696,7 +6696,7 @@ function renderPredScores(p) {
       (scores.summary ? '<div style="font-size:11px;opacity:0.85;line-height:1.5;margin-bottom:4px">' + scores.summary + '</div>' : '') +
       (scores.top_concern ? '<div style="font-size:11px;font-weight:700;color:#ffcc88">⚡ ' + scores.top_concern + '</div>' : '') +
       (scores.action ? '<div style="font-size:11px;opacity:0.75;margin-top:3px">→ ' + scores.action + '</div>' : '') +
-      '<div style="font-size:10px;opacity:0.4;margin-top:4px">Synced from Command Dashboard</div>' +
+      '<div style="font-size:10px;opacity:0.4;margin-top:4px">' + (scores.source === 'predict' ? '✓ Assessed by Predict AI' : '⏳ NEWS2 baseline — open Predict AI for full assessment') + '</div>' +
     '</div>';
 }
 
@@ -6748,7 +6748,7 @@ function renderAdmissionsTab(p) {
             (scores && scores.hosp30d != null ? scores.hosp30d + '%' : '—') + '</div></div>' +
       '</div>' +
       (!scores ? '<div style="font-size:11px;opacity:0.6;text-align:center;margin-top:6px">' +
-        'Open Command Dashboard to activate live AI scores · <button onclick="window.open(\'syncvitals-command.html\',\'sv_command\')" ' +
+        'Open Predict AI for a full assessment · <button onclick="window.open(\'syncvitals-predict.html\',\'sv_predict\')" ' +
         'style="background:rgba(255,255,255,0.2);border:0.5px solid rgba(255,255,255,0.3);color:#fff;' +
         'border-radius:6px;padding:2px 8px;font-size:11px;cursor:pointer">Open</button></div>' : '') +
       (scores && scores.summary ? '<div style="font-size:11px;opacity:0.85;line-height:1.5;margin-top:6px">' + scores.summary + '</div>' : '') +

@@ -167,19 +167,15 @@
     return { total: total, breakdown: b, band: band };
   }
 
-  // Baseline clinical scoring — always runs so numbers never sit empty.
-  // Architecture: NEWS2 (validated, vital-sign-only) provides the acuity
-  // core; condition-specific modifiers — sourced to their own guideline
-  // bodies (ADA for glucose, standard CHF self-monitoring guidance for
-  // rapid weight gain, adherence) — are added on top, not blended in.
-  // A portal (Command / Predict) can override with richer numbers via
-  // setDerived(), but newsScore/newsBand always stay engine-computed.
-  function baselineScore(p) {
+  // Predict AI is the single authority on composite risk scoring — this is
+  // a fallback only, so numbers are never blank before Predict AI has run
+  // for a patient. Once Predict AI enriches a patient (source:'predict'),
+  // this fallback stops recomputing riskScore/er48h/hosp30d/narrative for
+  // that patient — vitals and NEWS2 keep evolving underneath, but the
+  // authoritative assessment stays Predict AI's until the page resets.
+  function fallbackComposite(p) {
     const v = p.vitals;
-    const news = computeNEWS2(v);
-    // NEWS2 max realistic score ~17-20; scale so the RCP's own escalation
-    // bands (0-4 low / 5-6 or any single 3 = medium / >=7 high) roughly
-    // line up with SyncVitals' existing 0-40 / 40-60 / 60+ risk tiers.
+    const news = { total: p.newsScore, band: p.newsBand };
     let score = clamp(news.total * 7, 0, 75);
 
     // Condition-specific modifiers (guideline-sourced, layered on top of NEWS2)
@@ -215,7 +211,6 @@
     const hosp = clamp(Math.round(score * 0.6 + er * 0.25 + Math.max(0, (p.age - 65) * 0.4)), 3, 95);
     const det24h = clamp(Math.round(er * 0.55 + score * 0.3), 0, 95);
 
-    p.newsScore = news.total; p.newsBand = news.band; p.newsBreakdown = news.breakdown;
     p.riskScore = score; p.er48h = er; p.hosp30d = hosp; p.det24h = det24h;
     p.topConcern =
       (p.conditions.includes('CKD') && v.potassium > 5.5) ? ('Hyperkalemia K\u207a ' + v.potassium + ' mEq/L (KDIGO threshold >5.5)')
@@ -226,7 +221,7 @@
       : (v.spo2 != null && v.spo2 < 90) ? ('SpO\u2082 critical low (' + v.spo2 + '%)')
       : (p.conditions.includes('HTN') && (v.sbp >= 180 || v.dbp >= 120)) ? ('Hypertensive crisis (SBP ' + v.sbp + '/' + v.dbp + ', AHA/ACC)')
       : p.deteriorating ? 'Trending up over recent readings' : 'Stable';
-    p.summary = p.name.split(' ')[0] + ' (' + p.dx + ') \u2014 NEWS2 ' + news.total + ' (' + news.band + '), composite risk ' + score + '/100, ER 48h ' + er + '%, admit 30d ' + hosp + '%.';
+    p.summary = p.name.split(' ')[0] + ' (' + p.dx + ') \u2014 NEWS2 ' + news.total + ' (' + news.band + '), composite risk ' + score + '/100, ER 48h ' + er + '%, admit 30d ' + hosp + '%. (Awaiting full Predict AI assessment)';
     p.action = news.band === 'high' || score >= 70 ? 'Contact physician now' : news.band === 'medium' || score >= 45 ? 'Notify physician within 4 hours' : 'Continue monitoring per care plan';
     p.source = 'engine';
   }
@@ -236,7 +231,13 @@
     Object.keys(state.patients).forEach(function (id) {
       const p = state.patients[id];
       stepVitals(p);
-      baselineScore(p);
+      // NEWS2 is a vitals-only fact — always kept current for every patient.
+      const news = computeNEWS2(p.vitals);
+      p.newsScore = news.total; p.newsBand = news.band; p.newsBreakdown = news.breakdown;
+      // The composite risk score / ER% / admit% / narrative is Predict AI's
+      // call. Only fill it in here if Predict AI hasn't assessed this
+      // patient yet this session — never overwrite its assessment.
+      if (p.source !== 'predict') fallbackComposite(p);
     });
     state.tick++;
     state.updatedAt = Date.now();
@@ -247,6 +248,10 @@
 
   // Let a richer page (Command / Predict) push its own computed scores/narrative
   // for a patient without touching vitals — this "upgrades" what other tabs see.
+  // Predict AI is the intended caller for riskScore/er48h/hosp30d/summary —
+  // it's the hub; other portals should only read, not push competing
+  // assessments. (Command Dashboard intentionally does not call this for
+  // scoring anymore — see syncvitals-command.html.)
   function setDerived(id, fields) {
     const state = loadState();
     const p = state.patients[id];
