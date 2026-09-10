@@ -3138,7 +3138,7 @@ function svSyncFromEngine(state) {
     if (!ep) return;
     p.lastVitals = Object.assign({}, p.lastVitals, ep.vitals);
     p.vitalHistory = ep.history.map(function (h) {
-      return { ts: h.ts, sbp: h.sbp, dbp: h.dbp, weight: h.weight, spo2: h.spo2, glucose: h.glucose };
+      return { ts: h.ts, sbp: h.sbp, dbp: h.dbp, weight: h.weight, spo2: h.spo2, glucose: h.glucose, riskScore: h.riskScore };
     });
     p.riskScore = ep.riskScore;
     p.interventionNote = ep.interventionNote || null;
@@ -4014,14 +4014,23 @@ function renderTrendChart(p) {
   }
 
   // Intervention annotation — surfaces the "RPM caught it, clinician acted,
-  // patient improved" story directly on the chart instead of leaving it as
-  // invisible backend data.
+  // patient improved" story, but the "improved" claim is checked against
+  // the actual scored history, not asserted just because a note exists.
   const interventionEl = document.getElementById('np-trend-intervention');
   if (interventionEl) {
     if (p.interventionNote) {
       interventionEl.style.display = '';
-      interventionEl.innerHTML = '💊 <strong>Intervention logged</strong> — ' + p.interventionNote +
-        '. Risk trend reversed afterward — RPM flagged the decline in time to act.';
+      const scored = history.filter(function(h){ return h.riskScore != null; });
+      let verdict = '';
+      if (scored.length >= 4) {
+        const mid = Math.floor(scored.length / 2);
+        const peak = Math.max.apply(null, scored.slice(0, mid + 2).map(function(h){ return h.riskScore; }));
+        const recentAvg = scored.slice(-3).reduce(function(s,h){ return s + h.riskScore; }, 0) / Math.min(3, scored.length);
+        if (recentAvg < peak - 3) verdict = 'Risk score has come down since (peak ' + peak + ' \u2192 now ~' + Math.round(recentAvg) + ') \u2014 RPM flagged the decline in time to act.';
+        else if (recentAvg > peak - 3 && recentAvg >= peak) verdict = 'Risk score has not yet come down since this was logged \u2014 worth a follow-up check.';
+        else verdict = 'Risk score trend since this note: peak ' + peak + ', now ~' + Math.round(recentAvg) + '.';
+      }
+      interventionEl.innerHTML = '💊 <strong>Intervention logged</strong> — ' + p.interventionNote + (verdict ? ('. ' + verdict) : '');
     } else if (p.historyPattern === 'decline') {
       interventionEl.style.display = '';
       interventionEl.style.background = '#FCEBEB';
