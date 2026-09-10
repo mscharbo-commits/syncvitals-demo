@@ -109,11 +109,14 @@
   }
 
   // ── NEWS2 (National Early Warning Score 2) ──
-  // Royal College of Physicians, 2017 update; endorsed by NHS England for
-  // standardised detection of acute deterioration from routine vital signs.
-  // This is the validated "how acutely unwell right now" core of the risk
-  // engine — condition-specific modifiers (CHF weight gain, DM glucose,
-  // adherence) are layered on top of it in baselineScore(), not folded in.
+  // Originally Royal College of Physicians (UK), 2017 update, endorsed by
+  // NHS England. Also has direct U.S. federal adoption: selected for the
+  // VA's new nationwide federal EHR, and validated in a peer-reviewed
+  // study on Veteran patients (Kansas City VA, AUC 0.72 for 24h ICU
+  // transfer/mortality). This is the validated "how acutely unwell right
+  // now" core of the risk engine — condition-specific modifiers (CHF
+  // weight gain, DM glucose, adherence) are layered on top in
+  // baselineScore(), not folded in.
   function computeNEWS2(v) {
     const b = {};
     let total = 0;
