@@ -379,7 +379,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 /* Platform Navigator */
 
 </style>
-<script src="data-engine.js?v=1789078877"></script>
+<script src="data-engine.js?v=1789079168"></script>
 </head>
 <body>
 
@@ -3139,11 +3139,11 @@ let svPatients = [
 // updating instantly whenever the shared dataset ticks — in this tab or
 // any other open SyncVitals tab.
 function svSyncFromEngine(state) {
-  if (!window.SVEngine) return;
+  if (!window.SVEngine) { console.warn('[SyncVitals] window.SVEngine not loaded — engine script may have failed to load'); return; }
   state = state || window.SVEngine.loadState();
   svPatients.forEach(function (p) {
     const ep = state.patients[p.id];
-    if (!ep) return;
+    if (!ep) { console.warn('[SyncVitals] no engine data for patient', p.id); return; }
     p.lastVitals = Object.assign({}, p.lastVitals, ep.vitals);
     p.vitalHistory = ep.history.map(function (h) {
       return { ts: h.ts, sbp: h.sbp, dbp: h.dbp, weight: h.weight, spo2: h.spo2, glucose: h.glucose, riskScore: h.riskScore };
@@ -3151,6 +3151,10 @@ function svSyncFromEngine(state) {
     p.riskScore = ep.riskScore;
     p.interventionNote = ep.interventionNote || null;
     p.historyPattern = ep.historyPattern || null;
+    // alertLevel was static seed data that never updated — derive it live
+    // from the engine's current assessment instead.
+    p.alertLevel = ep.riskScore >= 65 ? 'crisis' : ep.riskScore >= 40 ? 'stage2' : 'stable';
+    if (p.id === 'P002') console.log('[SyncVitals] P002 sync — history entries:', ep.history.length, '| riskScore:', ep.riskScore, '| alertLevel:', p.alertLevel);
   });
   if (typeof renderRegistry === 'function' && document.getElementById('s-nurse-queue')) renderRegistry();
   if (typeof activePatientId !== 'undefined' && activePatientId) {
@@ -4048,6 +4052,8 @@ function renderTrendChart(p) {
     subtitleEl.style.color = trendDir === 'rising' ? '#A32D2D' : trendDir === 'falling' ? '#27500A' : '#888';
   }
   if (titleEl) titleEl.textContent = `BP Trend — last ${daySpan} days`;
+  if (titleEl) titleEl.title = 'debug: raw=' + rawHistory.length + ' bucketed=' + bucketHistoryByDay(rawHistory).length + ' shown=' + daily.length;
+  if (subtitleEl) subtitleEl.innerHTML += ' <span style="opacity:0.5;font-size:9px">[debug: raw ' + rawHistory.length + ', days ' + bucketHistoryByDay(rawHistory).length + ']</span>';
 
   // Stats
   const avg = Math.round(sbpValues.reduce((s,v)=>s+v,0) / sbpValues.length);
