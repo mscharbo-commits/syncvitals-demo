@@ -412,11 +412,13 @@ PATIENTS.forEach(p => {
 
 // ── RISK SCORING ──
 // Core acuity layer is NEWS2 (National Early Warning Score 2 — Royal
-// College of Physicians, endorsed by NHS England), computed by the shared
-// data engine so every portal uses the identical formula. Condition-specific
-// modifiers below are layered on top and individually guideline-sourced
-// (ADA for glucose, standard CHF self-monitoring guidance for rapid weight
-// gain) rather than folded into an unnamed points system.
+// College of Physicians, endorsed by NHS England; also selected for the
+// VA's federal EHR), computed by the shared data engine so every portal
+// uses the identical formula. Condition-specific modifiers below are
+// layered on top and individually guideline-sourced (ADA for glucose,
+// AHA for CHF weight gain and hypertension staging, KDIGO for CKD
+// potassium, GOLD for COPD FEV1%) rather than folded into an unnamed
+// points system.
 function scorePatient(p) {
   const s = engineState[p.id];
   const v = p.vitals;
@@ -426,7 +428,6 @@ function scorePatient(p) {
   let score = Math.min(75, news.total * 7);
   if (news.band === 'high') anoms.push({ sev: 'crit', msg: 'NEWS2 ' + news.total + ' — high acuity (RCP escalation threshold)' });
   else if (news.band === 'medium') anoms.push({ sev: 'warn', msg: 'NEWS2 ' + news.total + ' — medium acuity' });
-  if (v.sbp >= 180) anoms.push({ sev: 'crit', msg: 'SBP ' + v.sbp + ' — hypertensive crisis' });
   if (v.spo2 != null && v.spo2 < 90) anoms.push({ sev: 'crit', msg: 'SpO₂ ' + v.spo2 + '% — hypoxia' });
 
   // Glucose — ADA Standards of Care thresholds
@@ -435,11 +436,26 @@ function scorePatient(p) {
     else if (v.glucose > 180) { score += 8; anoms.push({ sev:'warn', msg:'Glucose ' + v.glucose + ' — above target' }); }
   }
   // CHF weight — standard CHF self-monitoring guidance (AHA)
+  const baselineWeight = p.id === 'P002' ? 196 : p.id === 'P005' ? 155 : v.weight;
   if (p.conditions.includes('CHF') && v.weight) {
-    const base = p.id === 'P002' ? 183 : p.id === 'P005' ? 155 : v.weight;
-    const gain = v.weight - base;
+    const gain = v.weight - baselineWeight;
     if (gain >= 5) { score += 15; anoms.push({ sev:'crit', msg:'+' + gain.toFixed(1) + ' lbs — CHF decompensation risk' }); }
     else if (gain >= 2) { score += 8; anoms.push({ sev:'warn', msg:'+' + gain.toFixed(1) + ' lbs — weight gain' }); }
+  }
+  // Hypertension staging — AHA/ACC (2017 guideline, JNC8 lineage)
+  if (p.conditions.includes('HTN')) {
+    if (v.sbp >= 180 || v.dbp >= 120) { score += 10; anoms.push({ sev:'crit', msg:'SBP ' + v.sbp + ' — hypertensive crisis (AHA/ACC)' }); }
+    else if (v.sbp >= 140 || v.dbp >= 90) { score += 5; anoms.push({ sev:'warn', msg:'SBP ' + v.sbp + ' — Stage 2 (AHA/ACC)' }); }
+  }
+  // Hyperkalemia — KDIGO CKD guideline threshold
+  if (p.conditions.includes('CKD') && v.potassium != null) {
+    if (v.potassium > 5.5) { score += 15; anoms.push({ sev:'crit', msg:'K⁺ ' + v.potassium + ' — hyperkalemia (KDIGO)' }); }
+    else if (v.potassium > 5.0) { score += 7; anoms.push({ sev:'warn', msg:'K⁺ ' + v.potassium + ' — trending high (KDIGO)' }); }
+  }
+  // FEV1% staging — GOLD 2024
+  if (p.conditions.includes('COPD') && v.fev1pct != null) {
+    if (v.fev1pct < 30) { score += 15; anoms.push({ sev:'crit', msg:'FEV₁ ' + v.fev1pct + '% — GOLD Stage IV' }); }
+    else if (v.fev1pct < 50) { score += 8; anoms.push({ sev:'warn', msg:'FEV₁ ' + v.fev1pct + '% — GOLD Stage III' }); }
   }
   // Adherence
   if (p.adherence === 'no') score += 14;

@@ -18,23 +18,23 @@
 
   const SEED_PATIENTS = [
     { id: 'P001', name: 'Margaret Okafor', age: 68, dx: 'HTN Stage 2, CKD Stage 3',
-      conditions: ['HTN', 'CKD'], phase: 30, riskBase: 62, deteriorating: true,
-      vitals: { sbp: 172, dbp: 98, hr: 88, spo2: 97, weight: 162, glucose: null, rr: 18, temp: 37.0, consciousness: 'alert', supplementalO2: false } },
+      conditions: ['HTN', 'CKD'], phase: 30, riskBase: 62, deteriorating: true, baselineWeight: 162,
+      vitals: { sbp: 172, dbp: 98, hr: 88, spo2: 97, weight: 162, glucose: null, rr: 18, temp: 37.0, consciousness: 'alert', supplementalO2: false, potassium: 5.0, fev1pct: null } },
     { id: 'P002', name: 'Robert Chen', age: 74, dx: 'CHF NYHA III, T2DM, HFrEF EF 40%',
-      conditions: ['CHF', 'DM'], phase: 30, riskBase: 76, deteriorating: true,
-      vitals: { sbp: 148, dbp: 88, hr: 96, spo2: 93, weight: 203, glucose: 218, rr: 20, temp: 37.1, consciousness: 'alert', supplementalO2: false } },
+      conditions: ['CHF', 'DM'], phase: 30, riskBase: 76, deteriorating: true, baselineWeight: 196,
+      vitals: { sbp: 148, dbp: 88, hr: 96, spo2: 93, weight: 203, glucose: 218, rr: 20, temp: 37.1, consciousness: 'alert', supplementalO2: false, potassium: null, fev1pct: null } },
     { id: 'P003', name: 'Diane Morales', age: 61, dx: 'COPD GOLD II, Declining SpO2',
-      conditions: ['COPD'], phase: 60, riskBase: 58, deteriorating: true,
-      vitals: { sbp: 128, dbp: 80, hr: 82, spo2: 89, weight: 154, glucose: null, rr: 22, temp: 37.0, consciousness: 'alert', supplementalO2: false } },
+      conditions: ['COPD'], phase: 60, riskBase: 58, deteriorating: true, baselineWeight: 154,
+      vitals: { sbp: 128, dbp: 80, hr: 82, spo2: 89, weight: 154, glucose: null, rr: 22, temp: 37.0, consciousness: 'alert', supplementalO2: false, potassium: null, fev1pct: 58 } },
     { id: 'P004', name: 'James Okafor', age: 71, dx: 'T2DM, HTN Stage 1, Stable',
-      conditions: ['DM', 'HTN'], phase: 60, riskBase: 30, deteriorating: false,
-      vitals: { sbp: 136, dbp: 84, hr: 74, spo2: 98, weight: 188, glucose: 142, rr: 16, temp: 36.8, consciousness: 'alert', supplementalO2: false } },
+      conditions: ['DM', 'HTN'], phase: 60, riskBase: 30, deteriorating: false, baselineWeight: 188,
+      vitals: { sbp: 136, dbp: 84, hr: 74, spo2: 98, weight: 188, glucose: 142, rr: 16, temp: 36.8, consciousness: 'alert', supplementalO2: false, potassium: null, fev1pct: null } },
     { id: 'P005', name: 'Patricia Walsh', age: 79, dx: 'CHF NYHA I, Stable',
-      conditions: ['CHF'], phase: 60, riskBase: 36, deteriorating: false,
-      vitals: { sbp: 132, dbp: 78, hr: 74, spo2: 96, weight: 158, glucose: null, rr: 16, temp: 36.9, consciousness: 'alert', supplementalO2: false } },
+      conditions: ['CHF'], phase: 60, riskBase: 36, deteriorating: false, baselineWeight: 155,
+      vitals: { sbp: 132, dbp: 78, hr: 74, spo2: 96, weight: 158, glucose: null, rr: 16, temp: 36.9, consciousness: 'alert', supplementalO2: false, potassium: null, fev1pct: null } },
     { id: 'P006', name: 'Marcus Rivera', age: 52, dx: 'HTN Stage 2, Non-Adherent',
-      conditions: ['HTN'], phase: 30, riskBase: 52, deteriorating: true,
-      vitals: { sbp: 158, dbp: 96, hr: 88, spo2: 98, weight: 195, glucose: null, rr: 18, temp: 37.0, consciousness: 'alert', supplementalO2: false } },
+      conditions: ['HTN'], phase: 30, riskBase: 52, deteriorating: true, baselineWeight: 195,
+      vitals: { sbp: 158, dbp: 96, hr: 88, spo2: 98, weight: 195, glucose: null, rr: 18, temp: 37.0, consciousness: 'alert', supplementalO2: false, potassium: null, fev1pct: null } },
   ];
 
   function clamp(v, min, max) { return Math.max(min, Math.min(max, v)); }
@@ -101,6 +101,8 @@
     if (v.glucose != null) v.glucose = Math.round(clamp(jitter(v.glucose, 12), 60, 400));
     if (v.rr != null) v.rr = Math.round(clamp(jitter(v.rr + drift * 0.25, 1.5), 10, 34));
     if (v.temp != null) v.temp = round1(clamp(jitter(v.temp, 0.15), 35.0, 39.5));
+    if (v.potassium != null) v.potassium = Math.round(clamp(jitter(v.potassium + drift * 0.03, 0.15), 3.0, 6.5) * 10) / 10;
+    if (v.fev1pct != null) v.fev1pct = Math.round(clamp(jitter(v.fev1pct - drift * 0.4, 2), 15, 90));
     // Auto-flag supplemental oxygen once SpO2 is persistently low — mirrors real
     // RPM/telehealth practice of prescribing home O2 below ~88-90%.
     if (v.spo2 != null) v.supplementalO2 = v.spo2 < 88;
@@ -181,11 +183,25 @@
 
     // Condition-specific modifiers (guideline-sourced, layered on top of NEWS2)
     if (v.glucose != null && p.conditions.includes('DM')) {
-      if (v.glucose > 300) score += 18; else if (v.glucose > 180) score += 8; // ADA thresholds
+      if (v.glucose > 300) score += 18; else if (v.glucose > 180) score += 8; // ADA Standards of Care
     }
-    if (p.conditions.includes('CHF') && v.weight != null) {
+    if (p.conditions.includes('CHF') && v.weight != null && p.baselineWeight != null) {
       // Rapid weight gain — standard CHF self-monitoring guidance (AHA)
-      score += p.deteriorating ? 10 : 0;
+      const gain = v.weight - p.baselineWeight;
+      if (gain >= 5) score += 15; else if (gain >= 2) score += 8;
+    }
+    if (p.conditions.includes('HTN')) {
+      // Hypertension staging — AHA/ACC (2017 guideline, JNC8 lineage), distinct from NEWS2's generic SBP band
+      if (v.sbp >= 180 || v.dbp >= 120) score += 10; // hypertensive crisis
+      else if (v.sbp >= 140 || v.dbp >= 90) score += 5; // Stage 2
+    }
+    if (p.conditions.includes('CKD') && v.potassium != null) {
+      // Hyperkalemia — KDIGO CKD guideline threshold (>5.5 mEq/L requires intervention)
+      if (v.potassium > 5.5) score += 15; else if (v.potassium > 5.0) score += 7;
+    }
+    if (p.conditions.includes('COPD') && v.fev1pct != null) {
+      // FEV1% staging — GOLD 2024 (COPD staging by FEV1%: <30% GOLD4, 30-49% GOLD3)
+      if (v.fev1pct < 30) score += 15; else if (v.fev1pct < 50) score += 8;
     }
     if (p.adherence === 'no') score += 14; else if (p.adherence === 'partial') score += 7;
 
@@ -196,9 +212,14 @@
 
     p.newsScore = news.total; p.newsBand = news.band; p.newsBreakdown = news.breakdown;
     p.riskScore = score; p.er48h = er; p.hosp30d = hosp; p.det24h = det24h;
-    p.topConcern = news.band === 'high' ? ('NEWS2 ' + news.total + ' (high) \u2014 multi-system deterioration')
+    p.topConcern =
+      (p.conditions.includes('CKD') && v.potassium > 5.5) ? ('Hyperkalemia K\u207a ' + v.potassium + ' mEq/L (KDIGO threshold >5.5)')
+      : (p.conditions.includes('COPD') && v.fev1pct != null && v.fev1pct < 50) ? ('FEV\u2081 ' + v.fev1pct + '% \u2014 GOLD Stage ' + (v.fev1pct < 30 ? 'IV' : 'III'))
+      : (p.conditions.includes('CHF') && p.baselineWeight != null && (v.weight - p.baselineWeight) >= 2) ? ('+' + (v.weight - p.baselineWeight).toFixed(1) + ' lbs since baseline \u2014 CHF fluid retention risk')
+      : (p.conditions.includes('DM') && v.glucose > 180) ? ('Glucose ' + v.glucose + ' mg/dL above ADA target')
+      : news.band === 'high' ? ('NEWS2 ' + news.total + ' (high) \u2014 multi-system deterioration')
       : (v.spo2 != null && v.spo2 < 90) ? ('SpO\u2082 critical low (' + v.spo2 + '%)')
-      : v.sbp >= 180 ? ('Hypertensive urgency (SBP ' + v.sbp + ')')
+      : (p.conditions.includes('HTN') && (v.sbp >= 180 || v.dbp >= 120)) ? ('Hypertensive crisis (SBP ' + v.sbp + '/' + v.dbp + ', AHA/ACC)')
       : p.deteriorating ? 'Trending up over recent readings' : 'Stable';
     p.summary = p.name.split(' ')[0] + ' (' + p.dx + ') \u2014 NEWS2 ' + news.total + ' (' + news.band + '), composite risk ' + score + '/100, ER 48h ' + er + '%, admit 30d ' + hosp + '%.';
     p.action = news.band === 'high' || score >= 70 ? 'Contact physician now' : news.band === 'medium' || score >= 45 ? 'Notify physician within 4 hours' : 'Continue monitoring per care plan';
