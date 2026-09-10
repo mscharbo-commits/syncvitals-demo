@@ -501,22 +501,22 @@ const DISEASES = {
 // PATIENT PROFILES
 // ═══════════════════════════════════════════════════════
 const PATIENTS = [
-  { id:'P001', name:'Margaret Okafor', initials:'MO', age:68, disease:'CKD', riskBase:62, deteriorating:true,
+  { id:'P001', name:'Margaret Okafor', initials:'MO', age:68, disease:'CKD', conditions:['HTN','CKD'], riskBase:62, deteriorating:true,
     dx:'HTN Stage 2, CKD Stage 3',
     baseVitals:{ egfr:44, creatinine:1.5, sbp:172, dbp:98, potassium:4.6, proteinuria:290, hemoglobin:11.4, adherence:55 } },
-  { id:'P002', name:'Robert Chen', initials:'RC', age:74, disease:'HF', riskBase:76, deteriorating:true,
+  { id:'P002', name:'Robert Chen', initials:'RC', age:74, disease:'HF', conditions:['CHF','DM'], riskBase:76, deteriorating:true,
     dx:'CHF NYHA III, T2DM, HFrEF EF 40%',
     baseVitals:{ weight:196, hr:96, sbp:148, dbp:88, spo2:93, rr:20, glucose:218, hba1c:9.1, adherence:55 } },
-  { id:'P003', name:'Diane Morales', initials:'DM', age:61, disease:'COPD', riskBase:58, deteriorating:true,
+  { id:'P003', name:'Diane Morales', initials:'DM', age:61, disease:'COPD', conditions:['COPD'], riskBase:58, deteriorating:true,
     dx:'COPD GOLD II, Declining SpO2',
     baseVitals:{ spo2:89, rr:20, hr:82, fev1pct:48, exacerbations:1, peakflow:210, adherence:88 } },
-  { id:'P004', name:'James Okafor', initials:'JO', age:71, disease:'DM', riskBase:30, deteriorating:false,
+  { id:'P004', name:'James Okafor', initials:'JO', age:71, disease:'DM', conditions:['DM','HTN'], riskBase:30, deteriorating:false,
     dx:'T2DM, HTN Stage 1, Stable',
     baseVitals:{ glucose:142, hba1c:7.8, sbp:136, weight:188, footscore:8, cgscore:62, adherence:88 } },
-  { id:'P005', name:'Patricia Walsh', initials:'PW', age:79, disease:'HF', riskBase:36, deteriorating:false,
+  { id:'P005', name:'Patricia Walsh', initials:'PW', age:79, disease:'HF', conditions:['CHF'], riskBase:36, deteriorating:false,
     dx:'CHF NYHA I, Stable',
     baseVitals:{ weight:156, hr:74, sbp:132, dbp:78, spo2:96, rr:16, adherence:91 } },
-  { id:'P006', name:'Marcus Rivera', initials:'MR', age:52, disease:'HTN', riskBase:52, deteriorating:true,
+  { id:'P006', name:'Marcus Rivera', initials:'MR', age:52, disease:'HTN', conditions:['HTN'], riskBase:52, deteriorating:true,
     dx:'HTN Stage 2, Non-Adherent',
     baseVitals:{ sbp:158, dbp:96, hr:88, map:117, pulse:62, adherence:30 } },
 ];
@@ -610,7 +610,10 @@ function ingestVitals(pid) {
       if (sv.rr != null) r.rr = sv.rr;
       if (sv.potassium != null) r.potassium = sv.potassium;
       if (sv.fev1pct != null) r.fev1pct = sv.fev1pct;
+      if (sv.egfr != null) r.egfr = sv.egfr;
       r.temp = sv.temp; r.consciousness = sv.consciousness; r.supplementalO2 = sv.supplementalO2;
+      const adherenceMap = { yes: 90, partial: 55, no: 20 };
+      if (ep.adherence && adherenceMap[ep.adherence] != null) r.adherence = adherenceMap[ep.adherence];
       if (p.disease === 'HTN' && r.sbp != null && r.dbp != null) {
         r.map = Math.round((r.sbp + 2 * r.dbp) / 3);
         r.pulse = r.sbp - r.dbp;
@@ -711,7 +714,11 @@ function detectAnomalies(pid) {
 // NEWS2 doesn't see (HbA1c, foot score, CGM score, peak flow, exacerbation
 // count, eGFR, creatinine, proteinuria, hemoglobin, adherence). Vitals that
 // NEWS2 already scores (SBP, SpO2, HR, RR) are intentionally NOT re-added
-// here to avoid double-counting the same signal twice.
+// here to avoid double-counting the same signal twice. Loops over the
+// patient's full conditions list (not just the single primary "disease"
+// used for the disease-specific charts) so a patient with CHF + diabetes
+// gets both modifiers — matching exactly what Command Dashboard / the
+// shared engine compute for the same patient.
 // ═══════════════════════════════════════════════════════
 function scoreRisk(pid) {
   const s = state[pid], p = s.profile;
@@ -720,27 +727,32 @@ function scoreRisk(pid) {
 
   const news = window.SVEngine ? window.SVEngine.computeNEWS2(r) : { total: 0, band: 'low' };
   let score = Math.min(75, news.total * 7);
+  const conditions = p.conditions || [p.disease === 'HF' ? 'CHF' : p.disease];
 
-  if (p.disease === 'HF') {
+  if (conditions.includes('CHF')) {
     // AHA CHF self-monitoring guidance — rapid weight gain
     const wg = r.weight - p.baseVitals.weight;
     score += wg >= 5 ? 15 : wg >= 3 ? 8 : wg >= 1 ? 3 : 0;
-  } else if (p.disease === 'COPD') {
+  }
+  if (conditions.includes('COPD')) {
     // GOLD 2024 — FEV1% staging + peak flow / exacerbation history
     score += r.fev1pct < 30 ? 15 : r.fev1pct < 50 ? 8 : 0;
     score += r.peakflow < 150 ? 12 : r.peakflow < 200 ? 6 : 0;
     score += r.exacerbations >= 3 ? 10 : r.exacerbations >= 2 ? 5 : 0;
-  } else if (p.disease === 'DM') {
+  }
+  if (conditions.includes('DM')) {
     // ADA Standards of Care — glucose/HbA1c targets + CGM time-in-range + foot risk
     score += r.glucose > 250 ? 18 : r.glucose > 180 ? 8 : r.glucose < 70 ? 20 : 0;
     score += r.hba1c > 10 ? 18 : r.hba1c > 8 ? 10 : r.hba1c > 7 ? 4 : 0;
     score += r.cgscore < 50 ? 12 : r.cgscore < 60 ? 6 : 0;
     score += r.footscore < 5 ? 12 : r.footscore < 7 ? 4 : 0;
-  } else if (p.disease === 'HTN') {
+  }
+  if (conditions.includes('HTN')) {
     // AHA/ACC (2017 guideline, JNC8 lineage) — staging + adherence
     score += r.sbp >= 180 || r.dbp >= 120 ? 10 : r.sbp >= 140 || r.dbp >= 90 ? 5 : 0;
     score += r.adherence < 60 ? 18 : r.adherence < 80 ? 7 : 0;
-  } else if (p.disease === 'CKD') {
+  }
+  if (conditions.includes('CKD')) {
     // KDIGO CKD guideline — eGFR staging, hyperkalemia, anemia of CKD
     score += r.egfr < 15 ? 22 : r.egfr < 30 ? 12 : r.egfr < 45 ? 5 : 0;
     score += r.potassium > 6.0 ? 18 : r.potassium > 5.5 ? 10 : r.potassium < 3.0 ? 15 : 0;

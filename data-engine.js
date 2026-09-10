@@ -19,22 +19,22 @@
   const SEED_PATIENTS = [
     { id: 'P001', name: 'Margaret Okafor', age: 68, dx: 'HTN Stage 2, CKD Stage 3',
       conditions: ['HTN', 'CKD'], phase: 30, riskBase: 62, deteriorating: true, baselineWeight: 162,
-      vitals: { sbp: 172, dbp: 98, hr: 88, spo2: 97, weight: 162, glucose: null, rr: 18, temp: 37.0, consciousness: 'alert', supplementalO2: false, potassium: 5.0, fev1pct: null } },
+      vitals: { sbp: 172, dbp: 98, hr: 88, spo2: 97, weight: 162, glucose: null, rr: 18, temp: 37.0, consciousness: 'alert', supplementalO2: false, potassium: 5.0, fev1pct: null, egfr: 44 } },
     { id: 'P002', name: 'Robert Chen', age: 74, dx: 'CHF NYHA III, T2DM, HFrEF EF 40%',
       conditions: ['CHF', 'DM'], phase: 30, riskBase: 76, deteriorating: true, baselineWeight: 196,
-      vitals: { sbp: 148, dbp: 88, hr: 96, spo2: 93, weight: 203, glucose: 218, rr: 20, temp: 37.1, consciousness: 'alert', supplementalO2: false, potassium: null, fev1pct: null } },
+      vitals: { sbp: 148, dbp: 88, hr: 96, spo2: 93, weight: 203, glucose: 218, rr: 20, temp: 37.1, consciousness: 'alert', supplementalO2: false, potassium: null, fev1pct: null, egfr: null } },
     { id: 'P003', name: 'Diane Morales', age: 61, dx: 'COPD GOLD II, Declining SpO2',
       conditions: ['COPD'], phase: 60, riskBase: 58, deteriorating: true, baselineWeight: 154,
-      vitals: { sbp: 128, dbp: 80, hr: 82, spo2: 89, weight: 154, glucose: null, rr: 22, temp: 37.0, consciousness: 'alert', supplementalO2: false, potassium: null, fev1pct: 58 } },
+      vitals: { sbp: 128, dbp: 80, hr: 82, spo2: 89, weight: 154, glucose: null, rr: 22, temp: 37.0, consciousness: 'alert', supplementalO2: false, potassium: null, fev1pct: 58, egfr: null } },
     { id: 'P004', name: 'James Okafor', age: 71, dx: 'T2DM, HTN Stage 1, Stable',
       conditions: ['DM', 'HTN'], phase: 60, riskBase: 30, deteriorating: false, baselineWeight: 188,
-      vitals: { sbp: 136, dbp: 84, hr: 74, spo2: 98, weight: 188, glucose: 142, rr: 16, temp: 36.8, consciousness: 'alert', supplementalO2: false, potassium: null, fev1pct: null } },
+      vitals: { sbp: 136, dbp: 84, hr: 74, spo2: 98, weight: 188, glucose: 142, rr: 16, temp: 36.8, consciousness: 'alert', supplementalO2: false, potassium: null, fev1pct: null, egfr: null } },
     { id: 'P005', name: 'Patricia Walsh', age: 79, dx: 'CHF NYHA I, Stable',
       conditions: ['CHF'], phase: 60, riskBase: 36, deteriorating: false, baselineWeight: 155,
-      vitals: { sbp: 132, dbp: 78, hr: 74, spo2: 96, weight: 158, glucose: null, rr: 16, temp: 36.9, consciousness: 'alert', supplementalO2: false, potassium: null, fev1pct: null } },
+      vitals: { sbp: 132, dbp: 78, hr: 74, spo2: 96, weight: 158, glucose: null, rr: 16, temp: 36.9, consciousness: 'alert', supplementalO2: false, potassium: null, fev1pct: null, egfr: null } },
     { id: 'P006', name: 'Marcus Rivera', age: 52, dx: 'HTN Stage 2, Non-Adherent',
       conditions: ['HTN'], phase: 30, riskBase: 52, deteriorating: true, baselineWeight: 195,
-      vitals: { sbp: 158, dbp: 96, hr: 88, spo2: 98, weight: 195, glucose: null, rr: 18, temp: 37.0, consciousness: 'alert', supplementalO2: false, potassium: null, fev1pct: null } },
+      vitals: { sbp: 158, dbp: 96, hr: 88, spo2: 98, weight: 195, glucose: null, rr: 18, temp: 37.0, consciousness: 'alert', supplementalO2: false, potassium: null, fev1pct: null, egfr: null } },
   ];
 
   function clamp(v, min, max) { return Math.max(min, Math.min(max, v)); }
@@ -103,6 +103,7 @@
     if (v.temp != null) v.temp = round1(clamp(jitter(v.temp, 0.15), 35.0, 39.5));
     if (v.potassium != null) v.potassium = Math.round(clamp(jitter(v.potassium + drift * 0.03, 0.15), 3.0, 6.5) * 10) / 10;
     if (v.fev1pct != null) v.fev1pct = Math.round(clamp(jitter(v.fev1pct - drift * 0.4, 2), 15, 90));
+    if (v.egfr != null) v.egfr = Math.round(clamp(jitter(v.egfr - drift * 0.15, 1), 5, 90));
     // Auto-flag supplemental oxygen once SpO2 is persistently low — mirrors real
     // RPM/telehealth practice of prescribing home O2 below ~88-90%.
     if (v.spo2 != null) v.supplementalO2 = v.spo2 < 88;
@@ -198,6 +199,10 @@
     if (p.conditions.includes('CKD') && v.potassium != null) {
       // Hyperkalemia — KDIGO CKD guideline threshold (>5.5 mEq/L requires intervention)
       if (v.potassium > 5.5) score += 15; else if (v.potassium > 5.0) score += 7;
+    }
+    if (p.conditions.includes('CKD') && v.egfr != null) {
+      // eGFR staging — KDIGO CKD guideline (the primary value CKD stages are defined by)
+      if (v.egfr < 15) score += 22; else if (v.egfr < 30) score += 12; else if (v.egfr < 45) score += 5;
     }
     if (p.conditions.includes('COPD') && v.fev1pct != null) {
       // FEV1% staging — GOLD 2024 (COPD staging by FEV1%: <30% GOLD4, 30-49% GOLD3)

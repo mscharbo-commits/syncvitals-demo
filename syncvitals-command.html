@@ -452,6 +452,12 @@ function scorePatient(p) {
     if (v.potassium > 5.5) { score += 15; anoms.push({ sev:'crit', msg:'K⁺ ' + v.potassium + ' — hyperkalemia (KDIGO)' }); }
     else if (v.potassium > 5.0) { score += 7; anoms.push({ sev:'warn', msg:'K⁺ ' + v.potassium + ' — trending high (KDIGO)' }); }
   }
+  // eGFR staging — KDIGO CKD guideline
+  if (p.conditions.includes('CKD') && v.egfr != null) {
+    if (v.egfr < 15) { score += 22; anoms.push({ sev:'crit', msg:'eGFR ' + v.egfr + ' — KDIGO Stage 5/ESRD' }); }
+    else if (v.egfr < 30) { score += 12; anoms.push({ sev:'warn', msg:'eGFR ' + v.egfr + ' — KDIGO Stage 4' }); }
+    else if (v.egfr < 45) { score += 5; }
+  }
   // FEV1% staging — GOLD 2024
   if (p.conditions.includes('COPD') && v.fev1pct != null) {
     if (v.fev1pct < 30) { score += 15; anoms.push({ sev:'crit', msg:'FEV₁ ' + v.fev1pct + '% — GOLD Stage IV' }); }
