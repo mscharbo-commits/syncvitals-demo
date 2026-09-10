@@ -13,6 +13,12 @@
    ============================================================ */
 (function (window) {
   const STORAGE_KEY = 'sv_shared_state_v1';
+  // Bump this whenever the patient/state data model changes in a way that
+  // makes existing saved sessions stale or degraded (new fields, changed
+  // scoring, fixed bugs in how history accumulates, etc). loadState()
+  // reseeds automatically on mismatch — no manual localStorage clearing
+  // needed by the user.
+  const SCHEMA_VERSION = 3;
   const CHANNEL_NAME = 'syncvitals_sync';
   const TICK_MS = 8000; // how often the shared dataset advances
 
@@ -187,7 +193,7 @@
       backfillHistory(patient); // populates p.history with the 16-day narrative trend
       patients[p.id] = patient;
     });
-    return { tick: 0, updatedAt: now, patients: patients };
+    return { tick: 0, updatedAt: now, schemaVersion: SCHEMA_VERSION, patients: patients };
   }
 
   function loadState() {
@@ -195,11 +201,7 @@
       const raw = localStorage.getItem(STORAGE_KEY);
       if (raw) {
         const parsed = JSON.parse(raw);
-        const firstPatient = parsed && parsed.patients && Object.values(parsed.patients)[0];
-        // Schema check: older saved sessions predate baselineVitals/severity
-        // (mean-reverting drift) — reseed rather than let them stay pinned
-        // at whatever extreme they'd drifted to under the old model.
-        if (firstPatient && firstPatient.baselineVitals && firstPatient.historyPattern) return parsed;
+        if (parsed && parsed.schemaVersion === SCHEMA_VERSION && parsed.patients && Object.keys(parsed.patients).length) return parsed;
       }
     } catch (e) {}
     const fresh = seedState();
