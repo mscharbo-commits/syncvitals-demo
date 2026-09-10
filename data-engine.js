@@ -18,22 +18,22 @@
 
   const SEED_PATIENTS = [
     { id: 'P001', name: 'Margaret Okafor', age: 68, dx: 'HTN Stage 2, CKD Stage 3',
-      conditions: ['HTN', 'CKD'], phase: 30, riskBase: 62, deteriorating: true, baselineWeight: 162,
+      conditions: ['HTN', 'CKD'], phase: 30, riskBase: 62, deteriorating: true, severityCap: 0.55, baselineWeight: 162,
       vitals: { sbp: 172, dbp: 98, hr: 88, spo2: 97, weight: 162, glucose: null, rr: 18, temp: 37.0, consciousness: 'alert', supplementalO2: false, potassium: 5.0, fev1pct: null, egfr: 44 } },
     { id: 'P002', name: 'Robert Chen', age: 74, dx: 'CHF NYHA III, T2DM, HFrEF EF 40%',
-      conditions: ['CHF', 'DM'], phase: 30, riskBase: 76, deteriorating: true, baselineWeight: 196,
+      conditions: ['CHF', 'DM'], phase: 30, riskBase: 76, deteriorating: true, severityCap: 0.75, baselineWeight: 196,
       vitals: { sbp: 148, dbp: 88, hr: 96, spo2: 93, weight: 203, glucose: 218, rr: 20, temp: 37.1, consciousness: 'alert', supplementalO2: false, potassium: null, fev1pct: null, egfr: null } },
     { id: 'P003', name: 'Diane Morales', age: 61, dx: 'COPD GOLD II, Declining SpO2',
-      conditions: ['COPD'], phase: 60, riskBase: 58, deteriorating: true, baselineWeight: 154,
+      conditions: ['COPD'], phase: 60, riskBase: 58, deteriorating: true, severityCap: 0.5, baselineWeight: 154,
       vitals: { sbp: 128, dbp: 80, hr: 82, spo2: 89, weight: 154, glucose: null, rr: 22, temp: 37.0, consciousness: 'alert', supplementalO2: false, potassium: null, fev1pct: 58, egfr: null } },
     { id: 'P004', name: 'James Okafor', age: 71, dx: 'T2DM, HTN Stage 1, Stable',
-      conditions: ['DM', 'HTN'], phase: 60, riskBase: 30, deteriorating: false, baselineWeight: 188,
+      conditions: ['DM', 'HTN'], phase: 60, riskBase: 30, deteriorating: false, severityCap: 0, baselineWeight: 188,
       vitals: { sbp: 136, dbp: 84, hr: 74, spo2: 98, weight: 188, glucose: 142, rr: 16, temp: 36.8, consciousness: 'alert', supplementalO2: false, potassium: null, fev1pct: null, egfr: null } },
     { id: 'P005', name: 'Patricia Walsh', age: 79, dx: 'CHF NYHA I, Stable',
-      conditions: ['CHF'], phase: 60, riskBase: 36, deteriorating: false, baselineWeight: 155,
+      conditions: ['CHF'], phase: 60, riskBase: 36, deteriorating: false, severityCap: 0, baselineWeight: 155,
       vitals: { sbp: 132, dbp: 78, hr: 74, spo2: 96, weight: 158, glucose: null, rr: 16, temp: 36.9, consciousness: 'alert', supplementalO2: false, potassium: null, fev1pct: null, egfr: null } },
     { id: 'P006', name: 'Marcus Rivera', age: 52, dx: 'HTN Stage 2, Non-Adherent',
-      conditions: ['HTN'], phase: 30, riskBase: 52, deteriorating: true, baselineWeight: 195,
+      conditions: ['HTN'], phase: 30, riskBase: 52, deteriorating: true, severityCap: 0.4, baselineWeight: 195,
       vitals: { sbp: 158, dbp: 96, hr: 88, spo2: 98, weight: 195, glucose: null, rr: 18, temp: 37.0, consciousness: 'alert', supplementalO2: false, potassium: null, fev1pct: null, egfr: null } },
   ];
 
@@ -48,6 +48,8 @@
       const vitals = Object.assign({}, p.vitals);
       patients[p.id] = Object.assign({}, p, {
         vitals: vitals,
+        baselineVitals: Object.assign({}, p.vitals), // reference point for mean-reverting drift
+        severity: 0, // 0-1, how far toward a "bad day" this patient currently is
         history: [Object.assign({ ts: now }, vitals)],
         riskScore: p.riskBase,
         er48h: Math.round(p.riskBase * 0.4),
@@ -66,7 +68,11 @@
       const raw = localStorage.getItem(STORAGE_KEY);
       if (raw) {
         const parsed = JSON.parse(raw);
-        if (parsed && parsed.patients && Object.keys(parsed.patients).length) return parsed;
+        const firstPatient = parsed && parsed.patients && Object.values(parsed.patients)[0];
+        // Schema check: older saved sessions predate baselineVitals/severity
+        // (mean-reverting drift) — reseed rather than let them stay pinned
+        // at whatever extreme they'd drifted to under the old model.
+        if (firstPatient && firstPatient.baselineVitals) return parsed;
       }
     } catch (e) {}
     const fresh = seedState();
@@ -90,20 +96,47 @@
     });
   }
 
+  // Mean-reverting drift: each vital oscillates around a "target" with
+  // noise, rather than an unbounded random walk. For deteriorating
+  // patients, the target itself slowly shifts worse over the session and
+  // plateaus at a clinically-meaningful (not physiologically-extreme)
+  // offset from baseline — so a long-running demo settles into a
+  // realistic "this patient is trending down" pattern instead of every
+  // vital eventually pinning at the hard safety clamp. Stable patients'
+  // targets stay at baseline, so they hover with normal variability.
   function stepVitals(p) {
     const v = p.vitals;
-    const drift = p.deteriorating ? 1 : -0.3;
-    if (v.sbp != null) v.sbp = Math.round(clamp(jitter(v.sbp + drift * 0.6, 3), 90, 210));
-    if (v.dbp != null) v.dbp = Math.round(clamp(jitter(v.dbp + drift * 0.3, 2), 55, 130));
-    if (v.hr != null) v.hr = Math.round(clamp(jitter(v.hr, 3), 50, 140));
-    if (v.spo2 != null) v.spo2 = Math.round(clamp(jitter(v.spo2 - (p.deteriorating ? 0.15 : 0), 1), 82, 100));
-    if (v.weight != null) v.weight = round1(clamp(jitter(v.weight + (p.deteriorating ? 0.15 : -0.05), 0.6), v.weight - 15, v.weight + 15));
-    if (v.glucose != null) v.glucose = Math.round(clamp(jitter(v.glucose, 12), 60, 400));
-    if (v.rr != null) v.rr = Math.round(clamp(jitter(v.rr + drift * 0.25, 1.5), 10, 34));
-    if (v.temp != null) v.temp = round1(clamp(jitter(v.temp, 0.15), 35.0, 39.5));
-    if (v.potassium != null) v.potassium = Math.round(clamp(jitter(v.potassium + drift * 0.03, 0.15), 3.0, 6.5) * 10) / 10;
-    if (v.fev1pct != null) v.fev1pct = Math.round(clamp(jitter(v.fev1pct - drift * 0.4, 2), 15, 90));
-    if (v.egfr != null) v.egfr = Math.round(clamp(jitter(v.egfr - drift * 0.15, 1), 5, 90));
+    const b = p.baselineVitals || v;
+
+    // severity ramps slowly toward each patient's individual ceiling
+    // (severityCap — reflects intended relative acuity, so not every
+    // deteriorating patient converges to the same "worst case") and decays
+    // back toward 0 for stable patients.
+    const cap = p.severityCap != null ? p.severityCap : (p.deteriorating ? 0.6 : 0);
+    p.severity = clamp((p.severity || 0) + (p.deteriorating ? 0.006 : -0.02), 0, cap);
+    const sev = p.severity;
+
+    const revert = 0.25; // fraction of the gap to target closed each tick
+    function step(key, worstDelta, noise, min, max, round) {
+      if (v[key] == null) return;
+      const target = (b[key] != null ? b[key] : v[key]) + worstDelta * sev;
+      let nv = v[key] + revert * (target - v[key]) + (Math.random() - 0.5) * 2 * noise;
+      nv = clamp(nv, min, max);
+      v[key] = round ? Math.round(nv) : round1(nv);
+    }
+
+    step('sbp', 26, 2.5, 90, 210, true);
+    step('dbp', 14, 1.5, 55, 130, true);
+    step('hr', 16, 2.5, 50, 140, true);
+    step('spo2', -7, 0.8, 82, 100, true);
+    step('weight', 7, 0.4, (b.weight || v.weight) - 15, (b.weight || v.weight) + 15, false);
+    step('glucose', 65, 10, 60, 400, true);
+    step('rr', 7, 1.2, 10, 34, true);
+    step('temp', 0.8, 0.12, 35.0, 39.5, false);
+    step('potassium', 0.9, 0.12, 3.0, 6.5, false);
+    step('fev1pct', -16, 1.5, 15, 90, true);
+    step('egfr', -16, 0.8, 5, 90, true);
+
     // Auto-flag supplemental oxygen once SpO2 is persistently low — mirrors real
     // RPM/telehealth practice of prescribing home O2 below ~88-90%.
     if (v.spo2 != null) v.supplementalO2 = v.spo2 < 88;
