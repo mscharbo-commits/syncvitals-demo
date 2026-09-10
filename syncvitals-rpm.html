@@ -519,6 +519,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
       <div class="sv-trend" id="np-trend-bars"></div>
       <div style="display:flex;justify-content:space-between;font-size:11px;color:#bbb;margin-top:4px" id="np-trend-labels"></div>
       <div style="display:flex;gap:8px;margin-top:8px;font-size:10px" id="np-trend-stats"></div>
+      <div id="np-trend-intervention" style="display:none;margin-top:8px;padding:8px 10px;border-radius:8px;background:#E8F2FB;border-left:3px solid #185FA5;font-size:11px;color:#0D2E6E"></div>
     </div>
     <div id="np-esc-box"><div class="sv-esc-box esc-now"><div class="esc-label">Escalate now — physician call recommended</div><div class="esc-text">Stage 2 reading with 3-week upward trend and CKD comorbidity. Recheck within 2 hours.</div></div></div>
     <div style="display:flex;justify-content:flex-end;padding:6px 16px 0;gap:6px;background:#fff;border-bottom:0.5px solid var(--sv-border)"><button onclick="openDBBrowser()" style="background:var(--sv-lightest);border:0.5px solid var(--sv-border);border-radius:6px;padding:5px 12px;font-size:12px;font-weight:600;color:var(--sv-navy-mid);cursor:pointer">📚 Care Plan DB</button><button id="ai-enrich-btn" onclick="openAIEnrich(30)" style="background:linear-gradient(135deg,#0D2E6E,#185FA5);border:none;border-radius:6px;padding:5px 12px;font-size:12px;font-weight:600;color:#fff;cursor:pointer;transition:all 0.2s">✨ AI Enrich</button></div>
@@ -3140,6 +3141,8 @@ function svSyncFromEngine(state) {
       return { ts: h.ts, sbp: h.sbp, dbp: h.dbp, weight: h.weight, spo2: h.spo2, glucose: h.glucose };
     });
     p.riskScore = ep.riskScore;
+    p.interventionNote = ep.interventionNote || null;
+    p.historyPattern = ep.historyPattern || null;
   });
   if (typeof renderRegistry === 'function' && document.getElementById('s-nurse-queue')) renderRegistry();
   if (typeof activePatientId !== 'undefined' && activePatientId) {
@@ -4008,6 +4011,26 @@ function renderTrendChart(p) {
       <span style="background:var(--sv-lightest);padding:3px 8px;border-radius:6px;color:var(--sv-navy-mid)">High: <strong>${Math.max(...sbpValues)}</strong></span>
       <span style="padding:3px 8px;border-radius:6px;font-weight:600;${trendDir==='rising'?'background:#FCEBEB;color:#A32D2D':trendDir==='falling'?'background:#EAF3DE;color:#27500A':'background:#EAF3DE;color:#27500A'}">${trendDir==='rising'?'↑ Rising':trendDir==='falling'?'↓ Improving':'→ Stable'}</span>
     `;
+  }
+
+  // Intervention annotation — surfaces the "RPM caught it, clinician acted,
+  // patient improved" story directly on the chart instead of leaving it as
+  // invisible backend data.
+  const interventionEl = document.getElementById('np-trend-intervention');
+  if (interventionEl) {
+    if (p.interventionNote) {
+      interventionEl.style.display = '';
+      interventionEl.innerHTML = '💊 <strong>Intervention logged</strong> — ' + p.interventionNote +
+        '. Risk trend reversed afterward — RPM flagged the decline in time to act.';
+    } else if (p.historyPattern === 'decline') {
+      interventionEl.style.display = '';
+      interventionEl.style.background = '#FCEBEB';
+      interventionEl.style.borderLeftColor = '#E24B4A';
+      interventionEl.style.color = '#A32D2D';
+      interventionEl.innerHTML = '⚠️ <strong>No intervention logged</strong> — trend has continued worsening. Consider physician outreach.';
+    } else {
+      interventionEl.style.display = 'none';
+    }
   }
 }
 
