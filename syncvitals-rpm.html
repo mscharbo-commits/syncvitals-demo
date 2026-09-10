@@ -379,7 +379,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 /* Platform Navigator */
 
 </style>
-<script src="data-engine.js?v=1789079795"></script>
+<script src="https://cdn.jsdelivr.net/npm/lightweight-charts@5.0.7/dist/lightweight-charts.standalone.production.js"></script>
+<script src="data-engine.js?v=1789082007"></script>
 </head>
 <body>
 
@@ -519,8 +520,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     <div class="sv-card" id="np-trend-card">
       <div class="sv-card-header" id="np-trend-title">BP Trend</div>
       <div style="font-size:13px;color:#888;margin-bottom:6px" id="np-trend-subtitle">Loading…</div>
-      <div class="sv-trend" id="np-trend-bars"></div>
-      <div style="display:flex;justify-content:space-between;font-size:11px;color:#bbb;margin-top:4px" id="np-trend-labels"></div>
+      <div id="np-trend-chart" style="height:180px;width:100%"></div>
       <div class="sv-trend-range" id="np-trend-range">
         <button data-days="7" onclick="setTrendRange(7)">7D</button>
         <button data-days="14" onclick="setTrendRange(14)">14D</button>
@@ -528,6 +528,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
       </div>
       <div style="display:flex;gap:8px;margin-top:8px;font-size:10px" id="np-trend-stats"></div>
       <div id="np-trend-intervention" style="display:none;margin-top:8px;padding:8px 10px;border-radius:8px;background:#E8F2FB;border-left:3px solid #185FA5;font-size:11px;color:#0D2E6E"></div>
+      <div style="font-size:9px;color:#ccc;margin-top:4px;text-align:right">Charts by <a href="https://www.tradingview.com/" target="_blank" rel="noopener" style="color:#ccc">TradingView</a></div>
     </div>
     <div id="np-esc-box"><div class="sv-esc-box esc-now"><div class="esc-label">Escalate now — physician call recommended</div><div class="esc-text">Stage 2 reading with 3-week upward trend and CKD comorbidity. Recheck within 2 hours.</div></div></div>
     <div style="display:flex;justify-content:flex-end;padding:6px 16px 0;gap:6px;background:#fff;border-bottom:0.5px solid var(--sv-border)"><button onclick="openDBBrowser()" style="background:var(--sv-lightest);border:0.5px solid var(--sv-border);border-radius:6px;padding:5px 12px;font-size:12px;font-weight:600;color:var(--sv-navy-mid);cursor:pointer">📚 Care Plan DB</button><button id="ai-enrich-btn" onclick="openAIEnrich(30)" style="background:linear-gradient(135deg,#0D2E6E,#185FA5);border:none;border-radius:6px;padding:5px 12px;font-size:12px;font-weight:600;color:#fff;cursor:pointer;transition:all 0.2s">✨ AI Enrich</button></div>
@@ -3955,6 +3956,8 @@ function renderPatientContext(p) {
 
 // ── RENDER TREND CHART FROM PATIENT VITAL HISTORY ──
 let _trendRangeDays = 14;
+let _trendChart = null, _trendSbpSeries = null, _trendDbpSeries = null;
+
 function setTrendRange(days) {
   _trendRangeDays = days;
   document.querySelectorAll('#np-trend-range button').forEach(function(b){ b.classList.toggle('active', +b.dataset.days === days); });
@@ -3977,20 +3980,47 @@ function bucketHistoryByDay(history) {
   return order.map(function(day) { return byDay[day]; });
 }
 
+function ensureTrendChart() {
+  if (_trendChart) return;
+  if (typeof LightweightCharts === 'undefined') return; // CDN blocked/offline — caller falls back gracefully
+  const el = document.getElementById('np-trend-chart');
+  if (!el) return;
+  _trendChart = LightweightCharts.createChart(el, {
+    height: 180,
+    layout: { background: { type: 'solid', color: 'transparent' }, textColor: '#888', fontFamily: 'inherit', fontSize: 11 },
+    grid: { vertLines: { visible: false }, horzLines: { color: '#F0F2F6' } },
+    rightPriceScale: { borderVisible: false },
+    timeScale: { borderVisible: false, timeVisible: false, secondsVisible: false },
+    crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
+    handleScroll: false,
+    handleScale: { mouseWheel: false, pinch: true, axisPressedMouseMove: false },
+  });
+  _trendSbpSeries = _trendChart.addSeries(LightweightCharts.AreaSeries, {
+    lineColor: '#185FA5', topColor: 'rgba(24,95,165,0.28)', bottomColor: 'rgba(24,95,165,0.02)',
+    lineWidth: 2, priceLineVisible: false, title: 'Systolic'
+  });
+  _trendDbpSeries = _trendChart.addSeries(LightweightCharts.LineSeries, {
+    color: '#A8C8EC', lineWidth: 1, lineStyle: LightweightCharts.LineStyle.Dashed,
+    priceLineVisible: false, lastValueVisible: false, title: 'Diastolic'
+  });
+  new ResizeObserver(function() {
+    if (_trendChart) _trendChart.applyOptions({ width: el.clientWidth });
+  }).observe(el);
+}
+
 function renderTrendChart(p) {
-  const barsEl = document.getElementById('np-trend-bars');
-  const labelsEl = document.getElementById('np-trend-labels');
+  const chartEl = document.getElementById('np-trend-chart');
   const subtitleEl = document.getElementById('np-trend-subtitle');
   const titleEl = document.getElementById('np-trend-title');
   const statsEl = document.getElementById('np-trend-stats');
-  if (!barsEl) return;
+  if (!chartEl) return;
 
   const rangeButtons = document.getElementById('np-trend-range');
   if (rangeButtons) rangeButtons.querySelectorAll('button').forEach(function(b){ b.classList.toggle('active', +b.dataset.days === _trendRangeDays); });
 
   const rawHistory = p.vitalHistory || [];
   if (!rawHistory.length) {
-    barsEl.innerHTML = '<div style="font-size:12px;color:#aaa;padding:8px">No history yet</div>';
+    chartEl.innerHTML = '<div style="font-size:12px;color:#aaa;padding:8px">No history yet</div>';
     return;
   }
 
@@ -3999,45 +4029,20 @@ function renderTrendChart(p) {
   const sbpValues = history.map(r => r.sbp).filter(Boolean);
   if (!sbpValues.length) return;
 
-  const minVal = Math.min(...sbpValues) - 10;
-  const maxVal = Math.max(...sbpValues) + 10;
-  const range = maxVal - minVal || 1;
-
   // Trend direction
   const first = sbpValues[0];
   const last = sbpValues[sbpValues.length - 1];
   const diff = last - first;
   const trendDir = diff > 5 ? 'rising' : diff < -5 ? 'falling' : 'stable';
 
-  // Bar color based on BP value
-  function barColor(sbp) {
-    if (sbp >= 180) return '#E24B4A';
-    if (sbp >= 160) return '#F09595';
-    if (sbp >= 140) return '#FAC775';
-    if (sbp >= 130) return '#A8C8EC';
-    return '#1D9E75';
-  }
-
-  barsEl.innerHTML = history.map(h => {
-    const sbp = h.sbp;
-    if (!sbp) return '';
-    const heightPct = Math.round(((sbp - minVal) / range) * 100);
-    const dateStr = new Date(h.ts).toLocaleDateString('en-US', {month:'short', day:'numeric'});
-    return `<div class="sv-bar" style="height:${Math.max(heightPct, 8)}%;background:${barColor(sbp)}" title="${dateStr}: ${sbp} mmHg"></div>`;
-  }).join('');
-
-  // Labels — evenly spaced actual dates instead of just first/last, so the
-  // axis reflects real calendar time rather than implying rapid-fire readings.
-  if (labelsEl) {
-    const fmt = d => d.toLocaleDateString('en-US', {month:'short', day:'numeric'});
-    const labelCount = Math.min(4, history.length);
-    const labels = [];
-    for (let i = 0; i < labelCount; i++) {
-      const idx = labelCount === 1 ? 0 : Math.round(i * (history.length - 1) / (labelCount - 1));
-      const isLast = idx === history.length - 1;
-      labels.push('<span>' + (isLast ? 'Today' : fmt(new Date(history[idx].ts))) + '</span>');
-    }
-    labelsEl.innerHTML = labels.join('');
+  ensureTrendChart();
+  if (_trendChart) {
+    chartEl.innerHTML = ''; // clear any prior "No history yet" fallback text
+    const toTime = ts => new Date(ts).toISOString().slice(0, 10);
+    _trendSbpSeries.setData(history.filter(h => h.sbp != null).map(h => ({ time: toTime(h.ts), value: h.sbp })));
+    _trendDbpSeries.setData(history.filter(h => h.dbp != null).map(h => ({ time: toTime(h.ts), value: h.dbp })));
+    _trendChart.timeScale().fitContent();
+    _trendChart.applyOptions({ width: chartEl.clientWidth });
   }
 
   // Subtitle
@@ -4052,8 +4057,6 @@ function renderTrendChart(p) {
     subtitleEl.style.color = trendDir === 'rising' ? '#A32D2D' : trendDir === 'falling' ? '#27500A' : '#888';
   }
   if (titleEl) titleEl.textContent = `BP Trend — last ${daySpan} days`;
-  if (titleEl) titleEl.title = 'debug: raw=' + rawHistory.length + ' bucketed=' + bucketHistoryByDay(rawHistory).length + ' shown=' + daily.length;
-  if (subtitleEl) subtitleEl.innerHTML += ' <span style="opacity:0.5;font-size:9px">[debug: raw ' + rawHistory.length + ', days ' + bucketHistoryByDay(rawHistory).length + ']</span>';
 
   // Stats
   const avg = Math.round(sbpValues.reduce((s,v)=>s+v,0) / sbpValues.length);
