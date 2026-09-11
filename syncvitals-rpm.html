@@ -380,7 +380,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 
 </style>
 <script src="lightweight-charts.js"></script>
-<script src="data-engine.js?v=1789097091"></script>
+<script src="data-engine.js?v=1789097649"></script>
 </head>
 <body>
 
@@ -520,6 +520,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     <div class="sv-card" id="np-trend-card">
       <div class="sv-card-header" id="np-trend-title">BP Trend</div>
       <div style="font-size:13px;color:#888;margin-bottom:6px" id="np-trend-subtitle">Loading…</div>
+      <div id="np-trend-legend" style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:8px;font-size:10px"></div>
       <div id="np-trend-chart" style="height:180px;width:100%"></div>
       <div class="sv-trend-range" id="np-trend-range">
         <button data-days="7" onclick="setTrendRange(7)">7D</button>
@@ -3963,13 +3964,13 @@ let _trendChart = null, _trendChartKey = null, _trendSbpSeries = null, _trendDbp
 // with the matching chronic condition. Skips any metric with no data in the
 // current window so a pane never renders empty.
 const TREND_METRIC_DEFS = [
-  { key: 'hr', label: 'Heart Rate', unit: 'bpm' },
-  { key: 'spo2', label: 'SpO\u2082', unit: '%' },
-  { key: 'weight', label: 'Weight', unit: 'lbs', condition: 'CHF' },
-  { key: 'glucose', label: 'Glucose', unit: 'mg/dL', condition: 'DM' },
-  { key: 'potassium', label: 'Potassium', unit: 'mEq/L', condition: 'CKD' },
-  { key: 'egfr', label: 'eGFR', unit: 'mL/min', condition: 'CKD' },
-  { key: 'fev1pct', label: 'FEV\u2081', unit: '%', condition: 'COPD' },
+  { key: 'hr', label: 'Heart Rate', unit: 'bpm', cadence: 'daily' },
+  { key: 'spo2', label: 'SpO\u2082', unit: '%', cadence: 'daily' },
+  { key: 'weight', label: 'Weight', unit: 'lbs', condition: 'CHF', cadence: 'daily' },
+  { key: 'glucose', label: 'Glucose', unit: 'mg/dL', condition: 'DM', cadence: 'daily' },
+  { key: 'potassium', label: 'Potassium', unit: 'mEq/L', condition: 'CKD', cadence: 'weekly' },
+  { key: 'egfr', label: 'eGFR', unit: 'mL/min', condition: 'CKD', cadence: 'weekly' },
+  { key: 'fev1pct', label: 'FEV\u2081', unit: '%', condition: 'COPD', cadence: 'weekly' },
 ];
 function getRelevantMetrics(p, history) {
   const conditions = p.conditions || [];
@@ -4021,7 +4022,7 @@ function ensureTrendChart(p, metrics) {
     width: el.clientWidth || 320,
     height: totalHeight,
     layout: { background: { type: 'solid', color: 'transparent' }, textColor: '#888', fontFamily: 'inherit', fontSize: 11,
-      panes: { separatorColor: '#F0F2F6', separatorHoverColor: '#E5E9F0' } },
+      panes: { separatorColor: '#D5DCE8', separatorHoverColor: '#B8C4DA' } },
     grid: { vertLines: { visible: false }, horzLines: { color: '#F0F2F6' } },
     rightPriceScale: { borderVisible: false },
     timeScale: { borderVisible: false, timeVisible: false, secondsVisible: false },
@@ -4031,17 +4032,20 @@ function ensureTrendChart(p, metrics) {
   });
   _trendSbpSeries = _trendChart.addSeries(LightweightCharts.AreaSeries, {
     lineColor: '#185FA5', topColor: 'rgba(24,95,165,0.28)', bottomColor: 'rgba(24,95,165,0.02)',
-    lineWidth: 2, priceLineVisible: false, title: 'Systolic'
+    lineWidth: 2, priceLineVisible: false, title: 'Systolic (mmHg)'
   }, 0);
   _trendDbpSeries = _trendChart.addSeries(LightweightCharts.LineSeries, {
     color: '#A8C8EC', lineWidth: 1, lineStyle: LightweightCharts.LineStyle.Dashed,
-    priceLineVisible: false, lastValueVisible: false, title: 'Diastolic'
+    priceLineVisible: false, lastValueVisible: false, title: 'Diastolic (mmHg)'
   }, 0);
   const paneColors = ['#D97B4F', '#2AA37A', '#7C5CBF', '#E09B3D', '#C25450', '#4C8FBF', '#3E9C8F'];
   _trendPaneSeries = {};
   metrics.forEach(function(m, i) {
+    const isWeekly = m.cadence === 'weekly';
     _trendPaneSeries[m.key] = _trendChart.addSeries(LightweightCharts.LineSeries, {
-      color: paneColors[i % paneColors.length], lineWidth: 2, priceLineVisible: false, title: m.label
+      color: paneColors[i % paneColors.length], lineWidth: 2, priceLineVisible: false,
+      title: m.label + ' (' + m.unit + (isWeekly ? ' \u00b7 weekly labs' : '') + ')',
+      lineType: isWeekly ? LightweightCharts.LineType.WithSteps : LightweightCharts.LineType.Simple
     }, i + 1);
   });
   _trendChartKey = key;
@@ -4090,6 +4094,19 @@ function renderTrendChart(p) {
 
   const metrics = getRelevantMetrics(p, history);
   ensureTrendChart(p, metrics);
+  const legendEl = document.getElementById('np-trend-legend');
+  if (legendEl) {
+    const paneColors = ['#D97B4F', '#2AA37A', '#7C5CBF', '#E09B3D', '#C25450', '#4C8FBF', '#3E9C8F'];
+    const bpChip = '<span style="display:flex;align-items:center;gap:4px;color:#185FA5;font-weight:600"><span style="width:8px;height:8px;border-radius:2px;background:#185FA5;display:inline-block"></span>Systolic/Diastolic (mmHg)</span>';
+    const metricChips = _trendChart ? metrics.map(function(m, i) {
+      const color = paneColors[i % paneColors.length];
+      const cadenceTag = m.cadence === 'weekly' ? ' \u00b7 weekly' : '';
+      return '<span style="display:flex;align-items:center;gap:4px;color:' + color + ';font-weight:600">' +
+        '<span style="width:8px;height:8px;border-radius:2px;background:' + color + ';display:inline-block"></span>' +
+        m.label + ' (' + m.unit + ')' + cadenceTag + '</span>';
+    }) : [];
+    legendEl.innerHTML = [bpChip].concat(metricChips).join('');
+  }
   if (_trendChart) {
     const toTime = ts => new Date(ts).toISOString().slice(0, 10);
     _trendSbpSeries.setData(history.filter(h => h.sbp != null).map(h => ({ time: toTime(h.ts), value: h.sbp })));

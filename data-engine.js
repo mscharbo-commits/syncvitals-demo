@@ -128,8 +128,11 @@
     const dayMs = 86400000;
     const entries = [];
     let lastVitals = null;
+    let lastLabVals = { potassium: null, fev1pct: null, egfr: null };
+    let labsInitialized = false;
     for (let d = HISTORY_DAYS - 1; d >= 0; d--) {
       const t = 1 - d / (HISTORY_DAYS - 1); // 0 at oldest day, 1 at today
+      const dayIndex = HISTORY_DAYS - 1 - d; // 0 at oldest day, counting up to today
       const sev = severityAtDay(cap, t, info);
       const v = {};
       function val(key, worstDelta, noise, round) {
@@ -143,7 +146,16 @@
       val('sbp', 26, 1.5, true); val('dbp', 14, 1, true); val('hr', 16, 1.5, true);
       val('spo2', -7, 0.5, true); val('weight', 7, 0.25, false); val('glucose', 65, 6, true);
       val('rr', 7, 0.75, true); val('temp', 0.8, 0.08, false);
-      val('potassium', 0.9, 0.08, false); val('fev1pct', -16, 1, true); val('egfr', -16, 0.5, true);
+      // Labs only redrawn every 7th day (real blood panel/spirometry
+      // cadence) — held flat in between rather than freshly randomized
+      // every day, matching the live-tick behavior and real clinical practice.
+      if (dayIndex % 7 === 0 || !labsInitialized) {
+        val('potassium', 0.9, 0.08, false); val('fev1pct', -16, 1, true); val('egfr', -16, 0.5, true);
+        lastLabVals = { potassium: v.potassium, fev1pct: v.fev1pct, egfr: v.egfr };
+        labsInitialized = true;
+      } else {
+        v.potassium = lastLabVals.potassium; v.fev1pct = lastLabVals.fev1pct; v.egfr = lastLabVals.egfr;
+      }
       v.consciousness = 'alert'; v.supplementalO2 = v.spo2 != null && v.spo2 < 88;
       const scored = scoreVitals(p.conditions, v, {
         riskBase: p.riskBase * floorMultiplierAtDay(t, info), baselineWeight: p.baselineWeight, adherence: p.adherence, age: p.age
@@ -262,9 +274,20 @@
     step('glucose', 65, 10, 60, 400, true);
     step('rr', 7, 1.2, 10, 34, true);
     step('temp', 0.8, 0.12, 35.0, 39.5, false);
-    step('potassium', 0.9, 0.12, 3.0, 6.5, false);
-    step('fev1pct', -16, 1.5, 15, 90, true);
-    step('egfr', -16, 0.8, 5, 90, true);
+
+    // Labs (potassium, eGFR, FEV1%) are only redrawn roughly weekly in real
+    // practice — a blood panel or spirometry test, not a daily home reading.
+    // Holding the value flat between draws (rather than re-randomizing it
+    // every tick) is both more clinically honest and gives trend charts an
+    // accurate "sparse update" pattern instead of a misleadingly smooth
+    // daily line for something that isn't measured daily.
+    const LAB_INTERVAL_MS = 7 * 86400000;
+    if (!p.lastLabDrawTs || Date.now() - p.lastLabDrawTs >= LAB_INTERVAL_MS) {
+      step('potassium', 0.9, 0.12, 3.0, 6.5, false);
+      step('fev1pct', -16, 1.5, 15, 90, true);
+      step('egfr', -16, 0.8, 5, 90, true);
+      p.lastLabDrawTs = Date.now();
+    }
 
     // Auto-flag supplemental oxygen once SpO2 is persistently low — mirrors real
     // RPM/telehealth practice of prescribing home O2 below ~88-90%.
