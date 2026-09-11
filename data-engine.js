@@ -18,7 +18,7 @@
   // scoring, fixed bugs in how history accumulates, etc). loadState()
   // reseeds automatically on mismatch — no manual localStorage clearing
   // needed by the user.
-  const SCHEMA_VERSION = 3;
+  const SCHEMA_VERSION = 4;
   const CHANNEL_NAME = 'syncvitals_sync';
   const TICK_MS = 8000; // how often the shared dataset advances
 
