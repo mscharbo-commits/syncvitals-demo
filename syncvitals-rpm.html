@@ -380,7 +380,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 
 </style>
 <script src="lightweight-charts.js"></script>
-<script src="data-engine.js?v=1789095709"></script>
+<script src="data-engine.js?v=1789095886"></script>
 </head>
 <body>
 
@@ -3155,7 +3155,6 @@ function svSyncFromEngine(state) {
     // alertLevel was static seed data that never updated — derive it live
     // from the engine's current assessment instead.
     p.alertLevel = ep.riskScore >= 65 ? 'crisis' : ep.riskScore >= 40 ? 'stage2' : 'stable';
-    if (p.id === 'P002') console.log('[SyncVitals] P002 sync — history entries:', ep.history.length, '| riskScore:', ep.riskScore, '| alertLevel:', p.alertLevel);
   });
   if (typeof renderRegistry === 'function' && document.getElementById('s-nurse-queue')) renderRegistry();
   if (typeof activePatientId !== 'undefined' && activePatientId) {
@@ -3983,9 +3982,10 @@ function bucketHistoryByDay(history) {
 
 function ensureTrendChart() {
   if (_trendChart) return;
-  if (typeof LightweightCharts === 'undefined') return; // CDN blocked/offline — caller falls back gracefully
+  if (typeof LightweightCharts === 'undefined') return; // library failed to load — caller falls back gracefully
   const el = document.getElementById('np-trend-chart');
   if (!el) return;
+  el.innerHTML = ''; // clear "No history yet" / old fallback bars before the chart inserts its own canvas
   _trendChart = LightweightCharts.createChart(el, {
     width: el.clientWidth || 320,
     height: 180,
@@ -4048,11 +4048,8 @@ function renderTrendChart(p) {
   const diff = last - first;
   const trendDir = diff > 5 ? 'rising' : diff < -5 ? 'falling' : 'stable';
 
-  console.log('[SyncVitals] chart debug — LightweightCharts loaded:', typeof LightweightCharts !== 'undefined', '| container size:', chartEl.clientWidth + 'x' + chartEl.clientHeight, '| container display:', getComputedStyle(chartEl).display, '| parent display:', getComputedStyle(chartEl.parentElement).display);
   ensureTrendChart();
-  console.log('[SyncVitals] chart debug — _trendChart created:', !!_trendChart, '| sbp points to plot:', history.filter(h => h.sbp != null).length);
   if (_trendChart) {
-    chartEl.innerHTML = ''; // clear any prior fallback content
     const toTime = ts => new Date(ts).toISOString().slice(0, 10);
     _trendSbpSeries.setData(history.filter(h => h.sbp != null).map(h => ({ time: toTime(h.ts), value: h.sbp })));
     _trendDbpSeries.setData(history.filter(h => h.dbp != null).map(h => ({ time: toTime(h.ts), value: h.dbp })));
@@ -4061,7 +4058,7 @@ function renderTrendChart(p) {
     // screen was still hidden — retry the size fix once the browser has
     // actually laid out the now-visible container.
     requestAnimationFrame(refreshTrendChartSize);
-    setTimeout(function(){ refreshTrendChartSize(); console.log('[SyncVitals] chart debug (150ms later) — container size:', chartEl.clientWidth + 'x' + chartEl.clientHeight, '| canvas count in container:', chartEl.querySelectorAll('canvas').length); }, 150);
+    setTimeout(refreshTrendChartSize, 150);
   } else {
     // Reliable fallback — no external CDN dependency, so this always
     // renders even if jsdelivr is blocked, offline, or slow to load.
