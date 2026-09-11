@@ -380,7 +380,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 
 </style>
 <script src="lightweight-charts.js"></script>
-<script src="data-engine.js?v=1789098343"></script>
+<script src="data-engine.js?v=1789099143"></script>
 </head>
 <body>
 
@@ -3148,7 +3148,7 @@ function svSyncFromEngine(state) {
     if (!ep) { console.warn('[SyncVitals] no engine data for patient', p.id); return; }
     p.lastVitals = Object.assign({}, p.lastVitals, ep.vitals);
     p.vitalHistory = ep.history.map(function (h) {
-      return { ts: h.ts, sbp: h.sbp, dbp: h.dbp, hr: h.hr, weight: h.weight, spo2: h.spo2, glucose: h.glucose, potassium: h.potassium, egfr: h.egfr, fev1pct: h.fev1pct, riskScore: h.riskScore };
+      return { ts: h.ts, sbp: h.sbp, dbp: h.dbp, hr: h.hr, weight: h.weight, spo2: h.spo2, glucose: h.glucose, potassium: h.potassium, egfr: h.egfr, fev1pct: h.fev1pct, riskScore: h.riskScore, readings: h.readings };
     });
     p.riskScore = ep.riskScore;
     p.interventionNote = ep.interventionNote || null;
@@ -4039,22 +4039,48 @@ function showDayDetailModal(p, entry) {
   if (!modal || !titleEl || !bodyEl) return;
   const dateStr = new Date(entry.ts).toLocaleDateString('en-US', { weekday:'long', month:'long', day:'numeric', year:'numeric' });
   titleEl.textContent = dateStr;
-  const rows = [
-    ['Blood Pressure', (entry.sbp != null ? entry.sbp : '\u2014') + '/' + (entry.dbp != null ? entry.dbp : '\u2014') + ' mmHg', '#185FA5'],
-    ['Heart Rate', entry.hr != null ? entry.hr + ' bpm' : null, '#D97B4F'],
-    ['SpO\u2082', entry.spo2 != null ? entry.spo2 + '%' : null, '#2AA37A'],
-    ['Weight', entry.weight != null ? entry.weight + ' lbs' : null, '#7C5CBF'],
-    ['Glucose', entry.glucose != null ? entry.glucose + ' mg/dL' : null, '#E09B3D'],
+  titleEl.style.fontSize = '19px';
+
+  // Day-level values that only get drawn/measured once (labs, risk score) —
+  // no intraday breakdown to show for these.
+  const summaryRows = [
     ['Potassium', entry.potassium != null ? entry.potassium + ' mEq/L' : null, '#C25450'],
     ['eGFR', entry.egfr != null ? entry.egfr + ' mL/min' : null, '#4C8FBF'],
     ['FEV\u2081', entry.fev1pct != null ? entry.fev1pct + '%' : null, '#3E9C8F'],
-    ['Composite risk score', entry.riskScore != null ? entry.riskScore + '/100' : null, '#333']
+    ['Composite risk score', entry.riskScore != null ? entry.riskScore + '/100' : null, '#0D2E6E']
   ].filter(function(r){ return r[1] != null; });
-  bodyEl.innerHTML = rows.map(function(r) {
-    return '<div style="display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-bottom:1px solid #F0F2F6">' +
-      '<span style="display:flex;align-items:center;gap:8px;font-size:13px;color:#444"><span style="width:8px;height:8px;border-radius:2px;background:' + r[2] + ';display:inline-block"></span>' + r[0] + '</span>' +
-      '<span style="font-size:14px;font-weight:700;color:#0D2E6E">' + r[1] + '</span></div>';
+
+  const readingLabelFor = function(r) {
+    const parts = [];
+    if (r.sbp != null) parts.push('<span style="color:#185FA5">' + r.sbp + '/' + (r.dbp != null ? r.dbp : '\u2014') + ' <span style="font-size:14px;font-weight:500;color:#888">mmHg</span></span>');
+    if (r.hr != null) parts.push('<span style="color:#D97B4F">' + r.hr + ' <span style="font-size:14px;font-weight:500;color:#888">bpm</span></span>');
+    if (r.spo2 != null) parts.push('<span style="color:#2AA37A">' + r.spo2 + '<span style="font-size:14px;font-weight:500;color:#888">%</span></span>');
+    if (r.weight != null) parts.push('<span style="color:#7C5CBF">' + r.weight + ' <span style="font-size:14px;font-weight:500;color:#888">lbs</span></span>');
+    if (r.glucose != null) parts.push('<span style="color:#E09B3D">' + r.glucose + ' <span style="font-size:14px;font-weight:500;color:#888">mg/dL</span></span>');
+    return parts.join('&nbsp;&nbsp;&middot;&nbsp;&nbsp;');
+  };
+
+  const readings = entry.readings && entry.readings.length ? entry.readings : [entry]; // fall back to the day summary if no intraday breakdown exists
+
+  let html = '<div style="font-size:12px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:0.06em;margin:10px 0 8px">' +
+    readings.length + ' reading' + (readings.length === 1 ? '' : 's') + ' logged this day</div>';
+  html += readings.map(function(r) {
+    const timeStr = new Date(r.ts).toLocaleTimeString('en-US', { hour:'numeric', minute:'2-digit' });
+    return '<div style="padding:12px 0;border-bottom:1px solid #F0F2F6">' +
+      '<div style="font-size:13px;font-weight:700;color:#999;margin-bottom:4px">' + timeStr + '</div>' +
+      '<div style="font-size:20px;font-weight:800;line-height:1.5">' + readingLabelFor(r) + '</div>' +
+    '</div>';
   }).join('');
+
+  if (summaryRows.length) {
+    html += '<div style="font-size:12px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:0.06em;margin:16px 0 8px">Also on file this day</div>';
+    html += summaryRows.map(function(r) {
+      return '<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid #F0F2F6">' +
+        '<span style="display:flex;align-items:center;gap:8px;font-size:15px;color:#444"><span style="width:9px;height:9px;border-radius:2px;background:' + r[2] + ';display:inline-block"></span>' + r[0] + '</span>' +
+        '<span style="font-size:18px;font-weight:800;color:#0D2E6E">' + r[1] + '</span></div>';
+    }).join('');
+  }
+  bodyEl.innerHTML = html;
   modal.classList.add('open');
 }
 function closeDayDetailModal() {
@@ -8130,11 +8156,11 @@ function nutrClear() {
 </script>
 <!-- ── PDF EXPORT MODAL ── -->
 <div id="day-detail-modal" class="sv-modal-overlay" onclick="if(event.target===this)closeDayDetailModal()">
-  <div class="sv-modal" style="max-width:420px;border-radius:16px">
+  <div class="sv-modal" style="max-width:460px;border-radius:16px">
     <div class="sv-modal-handle"></div>
     <div class="sv-modal-title" id="day-detail-title">Daily Readings</div>
     <div id="day-detail-body" style="margin-top:8px"></div>
-    <button onclick="closeDayDetailModal()" style="width:100%;margin-top:16px;padding:11px;border-radius:10px;border:none;background:var(--sv-navy);color:#fff;font-size:14px;font-weight:700;cursor:pointer">Close</button>
+    <button onclick="closeDayDetailModal()" style="width:100%;margin-top:16px;padding:13px;border-radius:10px;border:none;background:var(--sv-navy);color:#fff;font-size:16px;font-weight:700;cursor:pointer">Close</button>
   </div>
 </div>
 <div id="pdf-modal" class="sv-modal-overlay" onclick="if(event.target===this)closePdfModal()">

@@ -120,6 +120,36 @@
     return 1;
   }
 
+  // Real patients don't take one reading a day — a BP cuff gets used a
+  // couple times a day, glucose is checked around meals for diabetics,
+  // weight once each morning. This generates the individual timestamped
+  // checks for a given day so a nurse can see exactly what was measured
+  // and when, not just a single daily summary value.
+  function generateDayReadings(dayStartTs, v, conditions) {
+    const readings = [];
+    const noise = () => (Math.random() - 0.5) * 2;
+    const higherAcuity = conditions.indexOf('CHF') !== -1 || conditions.indexOf('COPD') !== -1;
+    const checkHours = higherAcuity ? [7, 13, 19] : [7, 19]; // more frequent checks for higher-acuity conditions
+    checkHours.forEach(function (hr, i) {
+      const ts = dayStartTs + hr * 3600000 + Math.floor(Math.random() * 1800000);
+      const r = { ts: ts };
+      if (v.sbp != null) r.sbp = Math.round(v.sbp + noise() * 4);
+      if (v.dbp != null) r.dbp = Math.round(v.dbp + noise() * 3);
+      if (v.hr != null) r.hr = Math.round(v.hr + noise() * 4);
+      if (v.spo2 != null) r.spo2 = Math.round(clamp(v.spo2 + noise() * 1, 82, 100));
+      if (i === 0 && v.weight != null) r.weight = v.weight; // weight checked once, in the morning
+      readings.push(r);
+    });
+    if (v.glucose != null && conditions.indexOf('DM') !== -1) {
+      [7, 12, 18, 21].forEach(function (hr) {
+        const ts = dayStartTs + hr * 3600000 + Math.floor(Math.random() * 1800000);
+        readings.push({ ts: ts, glucose: Math.round(clamp(v.glucose + noise() * 15, 60, 400)) });
+      });
+    }
+    readings.sort(function (a, b) { return a.ts - b.ts; });
+    return readings;
+  }
+
   function backfillHistory(p) {
     const info = HISTORY_PATTERNS[p.id] || { pattern: 'stable' };
     const b = p.baselineVitals;
@@ -160,7 +190,9 @@
       const scored = scoreVitals(p.conditions, v, {
         riskBase: p.riskBase * floorMultiplierAtDay(t, info), baselineWeight: p.baselineWeight, adherence: p.adherence, age: p.age
       });
-      entries.push(Object.assign({ ts: now - d * dayMs, riskScore: scored.score }, v));
+      const entryTs = now - d * dayMs;
+      const dayStartTs = new Date(entryTs); dayStartTs.setHours(0, 0, 0, 0);
+      entries.push(Object.assign({ ts: entryTs, riskScore: scored.score, readings: generateDayReadings(dayStartTs.getTime(), v, p.conditions) }, v));
       lastVitals = v;
     }
     p.history = entries;
