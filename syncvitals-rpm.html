@@ -380,7 +380,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 
 </style>
 <script src="lightweight-charts.js"></script>
-<script src="data-engine.js?v=1789095886"></script>
+<script src="data-engine.js?v=1789097091"></script>
 </head>
 <body>
 
@@ -3147,7 +3147,7 @@ function svSyncFromEngine(state) {
     if (!ep) { console.warn('[SyncVitals] no engine data for patient', p.id); return; }
     p.lastVitals = Object.assign({}, p.lastVitals, ep.vitals);
     p.vitalHistory = ep.history.map(function (h) {
-      return { ts: h.ts, sbp: h.sbp, dbp: h.dbp, weight: h.weight, spo2: h.spo2, glucose: h.glucose, riskScore: h.riskScore };
+      return { ts: h.ts, sbp: h.sbp, dbp: h.dbp, hr: h.hr, weight: h.weight, spo2: h.spo2, glucose: h.glucose, potassium: h.potassium, egfr: h.egfr, fev1pct: h.fev1pct, riskScore: h.riskScore };
     });
     p.riskScore = ep.riskScore;
     p.interventionNote = ep.interventionNote || null;
@@ -3956,7 +3956,28 @@ function renderPatientContext(p) {
 
 // ── RENDER TREND CHART FROM PATIENT VITAL HISTORY ──
 let _trendRangeDays = 14;
-let _trendChart = null, _trendSbpSeries = null, _trendDbpSeries = null;
+let _trendChart = null, _trendChartKey = null, _trendSbpSeries = null, _trendDbpSeries = null, _trendPaneSeries = {};
+
+// Which additional vitals/labs are worth charting for this patient — HR and
+// SpO2 are universal (core NEWS2 vitals), the rest only apply to patients
+// with the matching chronic condition. Skips any metric with no data in the
+// current window so a pane never renders empty.
+const TREND_METRIC_DEFS = [
+  { key: 'hr', label: 'Heart Rate', unit: 'bpm' },
+  { key: 'spo2', label: 'SpO\u2082', unit: '%' },
+  { key: 'weight', label: 'Weight', unit: 'lbs', condition: 'CHF' },
+  { key: 'glucose', label: 'Glucose', unit: 'mg/dL', condition: 'DM' },
+  { key: 'potassium', label: 'Potassium', unit: 'mEq/L', condition: 'CKD' },
+  { key: 'egfr', label: 'eGFR', unit: 'mL/min', condition: 'CKD' },
+  { key: 'fev1pct', label: 'FEV\u2081', unit: '%', condition: 'COPD' },
+];
+function getRelevantMetrics(p, history) {
+  const conditions = p.conditions || [];
+  return TREND_METRIC_DEFS.filter(function(d) {
+    if (d.condition && conditions.indexOf(d.condition) === -1) return false;
+    return history.some(function(h){ return h[d.key] != null; });
+  });
+}
 
 function setTrendRange(days) {
   _trendRangeDays = days;
@@ -3980,16 +4001,27 @@ function bucketHistoryByDay(history) {
   return order.map(function(day) { return byDay[day]; });
 }
 
-function ensureTrendChart() {
-  if (_trendChart) return;
+// Recreates the chart when switching to a patient with a different set of
+// relevant metrics (panes are fixed at creation time in this library) —
+// otherwise just reuses the existing chart/panes and lets renderTrendChart
+// update their data. All panes on one chart share the same time scale, so
+// they stay in sync automatically when the 7D/14D/30D range changes.
+function ensureTrendChart(p, metrics) {
   if (typeof LightweightCharts === 'undefined') return; // library failed to load — caller falls back gracefully
   const el = document.getElementById('np-trend-chart');
   if (!el) return;
+  const key = p.id + ':' + metrics.map(function(m){ return m.key; }).join(',');
+  if (_trendChart && _trendChartKey === key) return;
+  if (_trendChart) { try { _trendChart.remove(); } catch(e) {} _trendChart = null; }
+
+  const totalHeight = 120 + metrics.length * 70;
+  el.style.height = totalHeight + 'px';
   el.innerHTML = ''; // clear "No history yet" / old fallback bars before the chart inserts its own canvas
   _trendChart = LightweightCharts.createChart(el, {
     width: el.clientWidth || 320,
-    height: 180,
-    layout: { background: { type: 'solid', color: 'transparent' }, textColor: '#888', fontFamily: 'inherit', fontSize: 11 },
+    height: totalHeight,
+    layout: { background: { type: 'solid', color: 'transparent' }, textColor: '#888', fontFamily: 'inherit', fontSize: 11,
+      panes: { separatorColor: '#F0F2F6', separatorHoverColor: '#E5E9F0' } },
     grid: { vertLines: { visible: false }, horzLines: { color: '#F0F2F6' } },
     rightPriceScale: { borderVisible: false },
     timeScale: { borderVisible: false, timeVisible: false, secondsVisible: false },
@@ -4000,11 +4032,19 @@ function ensureTrendChart() {
   _trendSbpSeries = _trendChart.addSeries(LightweightCharts.AreaSeries, {
     lineColor: '#185FA5', topColor: 'rgba(24,95,165,0.28)', bottomColor: 'rgba(24,95,165,0.02)',
     lineWidth: 2, priceLineVisible: false, title: 'Systolic'
-  });
+  }, 0);
   _trendDbpSeries = _trendChart.addSeries(LightweightCharts.LineSeries, {
     color: '#A8C8EC', lineWidth: 1, lineStyle: LightweightCharts.LineStyle.Dashed,
     priceLineVisible: false, lastValueVisible: false, title: 'Diastolic'
+  }, 0);
+  const paneColors = ['#D97B4F', '#2AA37A', '#7C5CBF', '#E09B3D', '#C25450', '#4C8FBF', '#3E9C8F'];
+  _trendPaneSeries = {};
+  metrics.forEach(function(m, i) {
+    _trendPaneSeries[m.key] = _trendChart.addSeries(LightweightCharts.LineSeries, {
+      color: paneColors[i % paneColors.length], lineWidth: 2, priceLineVisible: false, title: m.label
+    }, i + 1);
   });
+  _trendChartKey = key;
   new ResizeObserver(function() {
     if (_trendChart && el.clientWidth > 0) _trendChart.applyOptions({ width: el.clientWidth });
   }).observe(el);
@@ -4048,11 +4088,16 @@ function renderTrendChart(p) {
   const diff = last - first;
   const trendDir = diff > 5 ? 'rising' : diff < -5 ? 'falling' : 'stable';
 
-  ensureTrendChart();
+  const metrics = getRelevantMetrics(p, history);
+  ensureTrendChart(p, metrics);
   if (_trendChart) {
     const toTime = ts => new Date(ts).toISOString().slice(0, 10);
     _trendSbpSeries.setData(history.filter(h => h.sbp != null).map(h => ({ time: toTime(h.ts), value: h.sbp })));
     _trendDbpSeries.setData(history.filter(h => h.dbp != null).map(h => ({ time: toTime(h.ts), value: h.dbp })));
+    metrics.forEach(function(m) {
+      const series = _trendPaneSeries[m.key];
+      if (series) series.setData(history.filter(function(h){ return h[m.key] != null; }).map(function(h){ return { time: toTime(h.ts), value: h[m.key] }; }));
+    });
     refreshTrendChartSize();
     // The chart may have been created (or this render triggered) while its
     // screen was still hidden — retry the size fix once the browser has
@@ -4060,8 +4105,8 @@ function renderTrendChart(p) {
     requestAnimationFrame(refreshTrendChartSize);
     setTimeout(refreshTrendChartSize, 150);
   } else {
-    // Reliable fallback — no external CDN dependency, so this always
-    // renders even if jsdelivr is blocked, offline, or slow to load.
+    // Reliable fallback — no external dependency, so this always renders
+    // even if the chart library failed to load. BP-only (no multi-pane).
     const minVal = Math.min(...sbpValues) - 10;
     const maxVal = Math.max(...sbpValues) + 10;
     const range = maxVal - minVal || 1;
@@ -4072,6 +4117,7 @@ function renderTrendChart(p) {
       if (sbp >= 130) return '#A8C8EC';
       return '#1D9E75';
     }
+    chartEl.style.height = '180px';
     chartEl.innerHTML = '<div class="sv-trend" style="height:100%">' + history.map(h => {
       if (!h.sbp) return '';
       const heightPct = Math.round(((h.sbp - minVal) / range) * 100);
@@ -4088,16 +4134,16 @@ function renderTrendChart(p) {
     stable: `Stable trend over ${daySpan} days — BP variation within normal range`
   };
   if (subtitleEl) {
-    subtitleEl.textContent = subtitles[trendDir] + ' (1 reading/day shown)';
+    subtitleEl.textContent = subtitles[trendDir] + (metrics.length ? ` \u00b7 also showing ${metrics.map(m=>m.label).join(', ')}` : '');
     subtitleEl.style.color = trendDir === 'rising' ? '#A32D2D' : trendDir === 'falling' ? '#27500A' : '#888';
   }
-  if (titleEl) titleEl.textContent = `BP Trend — last ${daySpan} days`;
+  if (titleEl) titleEl.textContent = `Vitals Trend — last ${daySpan} days`;
 
   // Stats
   const avg = Math.round(sbpValues.reduce((s,v)=>s+v,0) / sbpValues.length);
   if (statsEl) {
     statsEl.innerHTML = `
-      <span style="background:var(--sv-lightest);padding:3px 8px;border-radius:6px;color:var(--sv-navy-mid)">Avg: <strong>${avg}</strong></span>
+      <span style="background:var(--sv-lightest);padding:3px 8px;border-radius:6px;color:var(--sv-navy-mid)">Avg BP: <strong>${avg}</strong></span>
       <span style="background:var(--sv-lightest);padding:3px 8px;border-radius:6px;color:var(--sv-navy-mid)">Low: <strong>${Math.min(...sbpValues)}</strong></span>
       <span style="background:var(--sv-lightest);padding:3px 8px;border-radius:6px;color:var(--sv-navy-mid)">High: <strong>${Math.max(...sbpValues)}</strong></span>
       <span style="padding:3px 8px;border-radius:6px;font-weight:600;${trendDir==='rising'?'background:#FCEBEB;color:#A32D2D':trendDir==='falling'?'background:#EAF3DE;color:#27500A':'background:#EAF3DE;color:#27500A'}">${trendDir==='rising'?'↑ Rising':trendDir==='falling'?'↓ Improving':'→ Stable'}</span>
