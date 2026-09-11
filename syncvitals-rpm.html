@@ -380,7 +380,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 
 </style>
 <script src="lightweight-charts.js"></script>
-<script src="data-engine.js?v=1789099143"></script>
+<script src="data-engine.js?v=1789099311"></script>
 </head>
 <body>
 
@@ -520,7 +520,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     <div class="sv-card" id="np-trend-card">
       <div class="sv-card-header" id="np-trend-title">BP Trend</div>
       <div style="font-size:13px;color:#888;margin-bottom:6px" id="np-trend-subtitle">Loading…</div>
-      <div id="np-trend-legend" style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:8px;font-size:10px"></div>
+      <div id="np-trend-legend" style="display:flex;flex-direction:column;gap:6px;margin-bottom:10px"></div>
       <div id="np-trend-chart" style="height:180px;width:100%"></div>
       <div class="sv-trend-range" id="np-trend-range">
         <button data-days="7" onclick="setTrendRange(7)">7D</button>
@@ -3999,18 +3999,19 @@ function renderTrendLegend(entry) {
   const e = entry || _trendCurrentHistory[_trendCurrentHistory.length - 1];
   if (!e) { legendEl.innerHTML = ''; return; }
   const dateTag = entry ? (' \u00b7 ' + new Date(entry.ts).toLocaleDateString('en-US', {month:'short', day:'numeric'})) : '';
-  const bpChip = '<span style="display:flex;align-items:center;gap:4px;color:#185FA5;font-weight:600">' +
-    '<span style="width:8px;height:8px;border-radius:2px;background:#185FA5;display:inline-block"></span>' +
-    'BP: ' + (e.sbp != null ? e.sbp : '\u2014') + '/' + (e.dbp != null ? e.dbp : '\u2014') + ' mmHg' + dateTag + '</span>';
-  const metricChips = _trendChart ? _trendCurrentMetrics.map(function(m, i) {
+  function row(color, label, value) {
+    return '<div style="display:flex;align-items:baseline;gap:8px">' +
+      '<span style="width:10px;height:10px;border-radius:2px;background:' + color + ';display:inline-block;flex-shrink:0"></span>' +
+      '<span style="font-size:17px;font-weight:700;color:#222">' + label + ': ' + value + '</span></div>';
+  }
+  const bpRow = row('#185FA5', 'BP', (e.sbp != null ? e.sbp : '\u2014') + '/' + (e.dbp != null ? e.dbp : '\u2014') + ' mmHg' + dateTag);
+  const metricRows = _trendChart ? _trendCurrentMetrics.map(function(m, i) {
     const color = TREND_PANE_COLORS[i % TREND_PANE_COLORS.length];
     const val = e[m.key];
     const cadenceTag = m.cadence === 'weekly' ? ' \u00b7 weekly' : '';
-    return '<span style="display:flex;align-items:center;gap:4px;color:' + color + ';font-weight:600">' +
-      '<span style="width:8px;height:8px;border-radius:2px;background:' + color + ';display:inline-block"></span>' +
-      m.label + ': ' + (val != null ? val : '\u2014') + ' ' + m.unit + (entry ? dateTag : cadenceTag) + '</span>';
+    return row(color, m.label, (val != null ? val : '\u2014') + ' ' + m.unit + (entry ? dateTag : cadenceTag));
   }) : [];
-  legendEl.innerHTML = [bpChip].concat(metricChips).join('');
+  legendEl.innerHTML = [bpRow].concat(metricRows).join('');
 }
 
 function onTrendCrosshairMove(param) {
