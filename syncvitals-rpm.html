@@ -380,7 +380,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 
 </style>
 <script src="lightweight-charts.js"></script>
-<script src="data-engine.js?v=1789097649"></script>
+<script src="data-engine.js?v=1789098343"></script>
 </head>
 <body>
 
@@ -3958,6 +3958,8 @@ function renderPatientContext(p) {
 // ── RENDER TREND CHART FROM PATIENT VITAL HISTORY ──
 let _trendRangeDays = 14;
 let _trendChart = null, _trendChartKey = null, _trendSbpSeries = null, _trendDbpSeries = null, _trendPaneSeries = {};
+let _trendCurrentHistory = [], _trendCurrentMetrics = [], _trendCurrentPatientRef = null;
+const TREND_PANE_COLORS = ['#D97B4F', '#2AA37A', '#7C5CBF', '#E09B3D', '#C25450', '#4C8FBF', '#3E9C8F'];
 
 // Which additional vitals/labs are worth charting for this patient — HR and
 // SpO2 are universal (core NEWS2 vitals), the rest only apply to patients
@@ -3985,6 +3987,79 @@ function setTrendRange(days) {
   document.querySelectorAll('#np-trend-range button').forEach(function(b){ b.classList.toggle('active', +b.dataset.days === days); });
   const active = svPatients.find(function(x){ return x.id === activePatientId; });
   if (active) renderTrendChart(active);
+}
+
+// Renders the legend strip. With no entry given, shows the latest reading
+// (default state). With an entry (from hovering the crosshair), every pane's
+// value updates together to match that same day — this is what makes it
+// possible to compare what several vitals were doing at once, not just BP.
+function renderTrendLegend(entry) {
+  const legendEl = document.getElementById('np-trend-legend');
+  if (!legendEl) return;
+  const e = entry || _trendCurrentHistory[_trendCurrentHistory.length - 1];
+  if (!e) { legendEl.innerHTML = ''; return; }
+  const dateTag = entry ? (' \u00b7 ' + new Date(entry.ts).toLocaleDateString('en-US', {month:'short', day:'numeric'})) : '';
+  const bpChip = '<span style="display:flex;align-items:center;gap:4px;color:#185FA5;font-weight:600">' +
+    '<span style="width:8px;height:8px;border-radius:2px;background:#185FA5;display:inline-block"></span>' +
+    'BP: ' + (e.sbp != null ? e.sbp : '\u2014') + '/' + (e.dbp != null ? e.dbp : '\u2014') + ' mmHg' + dateTag + '</span>';
+  const metricChips = _trendChart ? _trendCurrentMetrics.map(function(m, i) {
+    const color = TREND_PANE_COLORS[i % TREND_PANE_COLORS.length];
+    const val = e[m.key];
+    const cadenceTag = m.cadence === 'weekly' ? ' \u00b7 weekly' : '';
+    return '<span style="display:flex;align-items:center;gap:4px;color:' + color + ';font-weight:600">' +
+      '<span style="width:8px;height:8px;border-radius:2px;background:' + color + ';display:inline-block"></span>' +
+      m.label + ': ' + (val != null ? val : '\u2014') + ' ' + m.unit + (entry ? dateTag : cadenceTag) + '</span>';
+  }) : [];
+  legendEl.innerHTML = [bpChip].concat(metricChips).join('');
+}
+
+function onTrendCrosshairMove(param) {
+  if (!param || !param.time) { renderTrendLegend(null); return; }
+  const entry = _trendCurrentHistory.find(function(h) {
+    return new Date(h.ts).toISOString().slice(0, 10) === param.time;
+  });
+  renderTrendLegend(entry || null);
+}
+
+// Click a day on any pane to see every reading logged that day, not just
+// the metric under the cursor — this is the "what was actually happening
+// on this specific day" view, pulling from the full patient history record.
+function onTrendClick(param) {
+  if (!param || !param.time || !_trendCurrentPatientRef) return;
+  const entry = _trendCurrentHistory.find(function(h) {
+    return new Date(h.ts).toISOString().slice(0, 10) === param.time;
+  });
+  if (entry) showDayDetailModal(_trendCurrentPatientRef, entry);
+}
+
+function showDayDetailModal(p, entry) {
+  const modal = document.getElementById('day-detail-modal');
+  const titleEl = document.getElementById('day-detail-title');
+  const bodyEl = document.getElementById('day-detail-body');
+  if (!modal || !titleEl || !bodyEl) return;
+  const dateStr = new Date(entry.ts).toLocaleDateString('en-US', { weekday:'long', month:'long', day:'numeric', year:'numeric' });
+  titleEl.textContent = dateStr;
+  const rows = [
+    ['Blood Pressure', (entry.sbp != null ? entry.sbp : '\u2014') + '/' + (entry.dbp != null ? entry.dbp : '\u2014') + ' mmHg', '#185FA5'],
+    ['Heart Rate', entry.hr != null ? entry.hr + ' bpm' : null, '#D97B4F'],
+    ['SpO\u2082', entry.spo2 != null ? entry.spo2 + '%' : null, '#2AA37A'],
+    ['Weight', entry.weight != null ? entry.weight + ' lbs' : null, '#7C5CBF'],
+    ['Glucose', entry.glucose != null ? entry.glucose + ' mg/dL' : null, '#E09B3D'],
+    ['Potassium', entry.potassium != null ? entry.potassium + ' mEq/L' : null, '#C25450'],
+    ['eGFR', entry.egfr != null ? entry.egfr + ' mL/min' : null, '#4C8FBF'],
+    ['FEV\u2081', entry.fev1pct != null ? entry.fev1pct + '%' : null, '#3E9C8F'],
+    ['Composite risk score', entry.riskScore != null ? entry.riskScore + '/100' : null, '#333']
+  ].filter(function(r){ return r[1] != null; });
+  bodyEl.innerHTML = rows.map(function(r) {
+    return '<div style="display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-bottom:1px solid #F0F2F6">' +
+      '<span style="display:flex;align-items:center;gap:8px;font-size:13px;color:#444"><span style="width:8px;height:8px;border-radius:2px;background:' + r[2] + ';display:inline-block"></span>' + r[0] + '</span>' +
+      '<span style="font-size:14px;font-weight:700;color:#0D2E6E">' + r[1] + '</span></div>';
+  }).join('');
+  modal.classList.add('open');
+}
+function closeDayDetailModal() {
+  const modal = document.getElementById('day-detail-modal');
+  if (modal) modal.classList.remove('open');
 }
 
 // Real BP monitoring is a handful of readings per day (or continuous-monitor
@@ -4038,17 +4113,18 @@ function ensureTrendChart(p, metrics) {
     color: '#A8C8EC', lineWidth: 1, lineStyle: LightweightCharts.LineStyle.Dashed,
     priceLineVisible: false, lastValueVisible: false, title: 'Diastolic (mmHg)'
   }, 0);
-  const paneColors = ['#D97B4F', '#2AA37A', '#7C5CBF', '#E09B3D', '#C25450', '#4C8FBF', '#3E9C8F'];
   _trendPaneSeries = {};
   metrics.forEach(function(m, i) {
     const isWeekly = m.cadence === 'weekly';
     _trendPaneSeries[m.key] = _trendChart.addSeries(LightweightCharts.LineSeries, {
-      color: paneColors[i % paneColors.length], lineWidth: 2, priceLineVisible: false,
+      color: TREND_PANE_COLORS[i % TREND_PANE_COLORS.length], lineWidth: 2, priceLineVisible: false,
       title: m.label + ' (' + m.unit + (isWeekly ? ' \u00b7 weekly labs' : '') + ')',
       lineType: isWeekly ? LightweightCharts.LineType.WithSteps : LightweightCharts.LineType.Simple
     }, i + 1);
   });
   _trendChartKey = key;
+  _trendChart.subscribeCrosshairMove(onTrendCrosshairMove);
+  _trendChart.subscribeClick(onTrendClick);
   new ResizeObserver(function() {
     if (_trendChart && el.clientWidth > 0) _trendChart.applyOptions({ width: el.clientWidth });
   }).observe(el);
@@ -4094,19 +4170,10 @@ function renderTrendChart(p) {
 
   const metrics = getRelevantMetrics(p, history);
   ensureTrendChart(p, metrics);
-  const legendEl = document.getElementById('np-trend-legend');
-  if (legendEl) {
-    const paneColors = ['#D97B4F', '#2AA37A', '#7C5CBF', '#E09B3D', '#C25450', '#4C8FBF', '#3E9C8F'];
-    const bpChip = '<span style="display:flex;align-items:center;gap:4px;color:#185FA5;font-weight:600"><span style="width:8px;height:8px;border-radius:2px;background:#185FA5;display:inline-block"></span>Systolic/Diastolic (mmHg)</span>';
-    const metricChips = _trendChart ? metrics.map(function(m, i) {
-      const color = paneColors[i % paneColors.length];
-      const cadenceTag = m.cadence === 'weekly' ? ' \u00b7 weekly' : '';
-      return '<span style="display:flex;align-items:center;gap:4px;color:' + color + ';font-weight:600">' +
-        '<span style="width:8px;height:8px;border-radius:2px;background:' + color + ';display:inline-block"></span>' +
-        m.label + ' (' + m.unit + ')' + cadenceTag + '</span>';
-    }) : [];
-    legendEl.innerHTML = [bpChip].concat(metricChips).join('');
-  }
+  _trendCurrentHistory = history;
+  _trendCurrentMetrics = metrics;
+  _trendCurrentPatientRef = p;
+  renderTrendLegend(null); // show latest reading by default; updates live on crosshair move
   if (_trendChart) {
     const toTime = ts => new Date(ts).toISOString().slice(0, 10);
     _trendSbpSeries.setData(history.filter(h => h.sbp != null).map(h => ({ time: toTime(h.ts), value: h.sbp })));
@@ -8062,6 +8129,14 @@ function nutrClear() {
 }
 </script>
 <!-- ── PDF EXPORT MODAL ── -->
+<div id="day-detail-modal" class="sv-modal-overlay" onclick="if(event.target===this)closeDayDetailModal()">
+  <div class="sv-modal" style="max-width:420px;border-radius:16px">
+    <div class="sv-modal-handle"></div>
+    <div class="sv-modal-title" id="day-detail-title">Daily Readings</div>
+    <div id="day-detail-body" style="margin-top:8px"></div>
+    <button onclick="closeDayDetailModal()" style="width:100%;margin-top:16px;padding:11px;border-radius:10px;border:none;background:var(--sv-navy);color:#fff;font-size:14px;font-weight:700;cursor:pointer">Close</button>
+  </div>
+</div>
 <div id="pdf-modal" class="sv-modal-overlay" onclick="if(event.target===this)closePdfModal()">
   <div class="sv-modal" style="max-width:420px;border-radius:16px">
     <div class="sv-modal-handle"></div>
