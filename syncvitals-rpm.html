@@ -380,7 +380,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 
 </style>
 <script src="lightweight-charts.js"></script>
-<script src="data-engine.js?v=1789087373"></script>
+<script src="data-engine.js?v=1789095709"></script>
 </head>
 <body>
 
@@ -4048,7 +4048,9 @@ function renderTrendChart(p) {
   const diff = last - first;
   const trendDir = diff > 5 ? 'rising' : diff < -5 ? 'falling' : 'stable';
 
+  console.log('[SyncVitals] chart debug — LightweightCharts loaded:', typeof LightweightCharts !== 'undefined', '| container size:', chartEl.clientWidth + 'x' + chartEl.clientHeight, '| container display:', getComputedStyle(chartEl).display, '| parent display:', getComputedStyle(chartEl.parentElement).display);
   ensureTrendChart();
+  console.log('[SyncVitals] chart debug — _trendChart created:', !!_trendChart, '| sbp points to plot:', history.filter(h => h.sbp != null).length);
   if (_trendChart) {
     chartEl.innerHTML = ''; // clear any prior fallback content
     const toTime = ts => new Date(ts).toISOString().slice(0, 10);
@@ -4059,7 +4061,7 @@ function renderTrendChart(p) {
     // screen was still hidden — retry the size fix once the browser has
     // actually laid out the now-visible container.
     requestAnimationFrame(refreshTrendChartSize);
-    setTimeout(refreshTrendChartSize, 150);
+    setTimeout(function(){ refreshTrendChartSize(); console.log('[SyncVitals] chart debug (150ms later) — container size:', chartEl.clientWidth + 'x' + chartEl.clientHeight, '| canvas count in container:', chartEl.querySelectorAll('canvas').length); }, 150);
   } else {
     // Reliable fallback — no external CDN dependency, so this always
     // renders even if jsdelivr is blocked, offline, or slow to load.
