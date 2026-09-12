@@ -381,7 +381,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 </style>
 <script src="supabase-client.js"></script>
 <script src="lightweight-charts.js"></script>
-<script src="data-engine.js?v=1789193558"></script>
+<script src="data-engine.js?v=1789194228"></script>
 </head>
 <body>
 
@@ -1107,11 +1107,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
             <button data-days="30" onclick="setCompareRange(30)">30D</button>
           </div>
           <div style="font-size:9px;color:#ccc;margin-top:4px;text-align:right">Charts by <a href="https://www.tradingview.com/" target="_blank" rel="noopener" style="color:#ccc">TradingView</a></div>
-          <div style="font-size:13px;font-weight:700;color:var(--sv-navy);margin:18px 0 4px">Daily Log</div>
-          <div style="font-size:11px;color:#888;margin-bottom:8px">Red = over goal &middot; Amber = 90%+ of goal</div>
-          <div style="overflow-x:auto">
-            <table id="nt-compare-table" style="width:100%;border-collapse:collapse;font-size:12px;white-space:nowrap"></table>
-          </div>
         </div>
       </div>
     </div>
@@ -4641,7 +4636,7 @@ function ensureGroupChart(groupKey, containerId, p, metrics, withMainBP) {
   if (withMainBP) {
     state.sbp = state.chart.addSeries(LightweightCharts.AreaSeries, {
       lineColor: '#185FA5', topColor: 'rgba(24,95,165,0.28)', bottomColor: 'rgba(24,95,165,0.02)',
-      lineWidth: 2, priceLineVisible: false, title: 'Systolic (mmHg)'
+      lineWidth: 2, priceLineVisible: false, lastValueVisible: false, title: 'Systolic (mmHg)'
     }, 0);
     state.dbp = state.chart.addSeries(LightweightCharts.LineSeries, {
       color: '#A8C8EC', lineWidth: 1, lineStyle: LightweightCharts.LineStyle.Dashed,
@@ -4652,7 +4647,7 @@ function ensureGroupChart(groupKey, containerId, p, metrics, withMainBP) {
   state.panes = {};
   metrics.forEach(function (m, i) {
     state.panes[m.key] = state.chart.addSeries(LightweightCharts.LineSeries, {
-      color: m.color, lineWidth: 2, priceLineVisible: false, title: m.label + (m.unit ? ' (' + m.unit + ')' : '')
+      color: m.color, lineWidth: 2, priceLineVisible: false, lastValueVisible: false, title: m.label + (m.unit ? ' (' + m.unit + ')' : '')
     }, paneIndex + i);
   });
   state.key = key;
@@ -4678,18 +4673,29 @@ function renderCompareLegend(row) {
   const r = row || _compareCurrentData[_compareCurrentData.length - 1];
   if (!r) { legendEl.innerHTML = ''; return; }
   const dateTag = row ? (' \u00b7 ' + new Date(row.ts).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })) : '';
-  function line(color, label, value) {
-    return '<div style="display:flex;align-items:baseline;gap:8px">' +
-      '<span style="width:10px;height:10px;border-radius:2px;background:' + color + ';display:inline-block;flex-shrink:0"></span>' +
-      '<span style="font-size:17px;font-weight:700;color:#222">' + label + ': ' + value + '</span></div>';
+  function chip(color, label, value) {
+    return '<span style="display:inline-flex;align-items:baseline;gap:5px;margin-right:14px;white-space:nowrap">' +
+      '<span style="width:8px;height:8px;border-radius:2px;background:' + color + ';display:inline-block;flex-shrink:0"></span>' +
+      '<span style="font-size:14px;font-weight:700;color:#222">' + label + ': ' + value + '</span></span>';
   }
-  const bpLine = line('#185FA5', 'BP', (r.sbp != null ? r.sbp : '\u2014') + '/' + (r.dbp != null ? r.dbp : '\u2014') + ' mmHg' + dateTag);
-  const allMetrics = [].concat(_compareCurrentMetrics.vitals, _compareCurrentMetrics.nutrition, _compareCurrentMetrics.activity);
-  const metricLines = allMetrics.map(function (m) {
-    const val = r[m.key];
-    return line(m.color, m.label, (val != null ? val.toLocaleString() : '\u2014') + (m.unit ? (' ' + m.unit) : '') + (row ? dateTag : ''));
-  });
-  legendEl.innerHTML = [bpLine].concat(metricLines).join('');
+  function row_(label, chips) {
+    if (!chips) return '';
+    return '<div style="display:flex;flex-wrap:wrap;align-items:baseline">' +
+      '<span style="font-size:10px;font-weight:700;color:#aaa;text-transform:uppercase;margin-right:8px">' + label + '</span>' + chips + '</div>';
+  }
+  const bpChip = chip('#185FA5', 'BP', (r.sbp != null ? r.sbp : '\u2014') + '/' + (r.dbp != null ? r.dbp : '\u2014') + ' mmHg');
+  function groupChips(metrics) {
+    return metrics.map(function (m) {
+      const val = r[m.key];
+      return chip(m.color, m.label, (val != null ? val.toLocaleString() : '\u2014') + (m.unit ? (' ' + m.unit) : ''));
+    }).join('');
+  }
+  const html = [
+    row_('Vitals', bpChip + groupChips(_compareCurrentMetrics.vitals)),
+    row_('Nutrition', groupChips(_compareCurrentMetrics.nutrition)),
+    row_('Activity', groupChips(_compareCurrentMetrics.activity)),
+  ].join('') + (row ? '<div style="font-size:10px;color:#aaa;margin-top:2px">' + new Date(row.ts).toLocaleDateString('en-US', { weekday:'short', month: 'short', day: 'numeric' }) + '</div>' : '');
+  legendEl.innerHTML = html;
 }
 
 // Any of the 3 charts firing this updates the SAME shared legend, keyed by
@@ -4699,46 +4705,6 @@ function onCompareCrosshairMove(param) {
   if (!param || !param.time) { renderCompareLegend(null); return; }
   const row = _compareCurrentData.find(function (r) { return r.dateStr === param.time; });
   renderCompareLegend(row || null);
-}
-
-function renderCompareTable(p, data, goals) {
-  const tableEl = document.getElementById('nt-compare-table');
-  if (!tableEl) return;
-  function cellClass(val, goal) {
-    if (val == null || !goal) return '';
-    if (val > goal) return 'color:#A32D2D;font-weight:700';
-    if (val > goal * 0.9) return 'color:#B8860B;font-weight:600';
-    return '';
-  }
-  const cols = [
-    { h: 'Date' }, { h: 'BP' },
-    { h: 'Cal', key: 'calories', goal: goals.calories },
-    { h: 'Na mg', key: 'sodium', goal: goals.sodium },
-    { h: 'K mg', key: 'dietPotassium', goal: goals.potassium },
-    { h: 'Pro g', key: 'protein', goal: goals.protein },
-    { h: 'Carb g', key: 'carbs', goal: goals.carbs },
-    { h: 'Sug g', key: 'sugar', goal: goals.sugar },
-    { h: 'Fat g', key: 'fat', goal: null },
-    { h: 'Phos mg', key: 'phosphorus', goal: goals.phosphorus },
-    { h: 'Steps', key: 'steps', goal: 4000 },
-    { h: 'Active min', key: 'activityMin', goal: 30 },
-  ];
-  let html = '<tr style="border-bottom:2px solid var(--sv-border)">' +
-    cols.map(function (c) { return '<th style="text-align:left;padding:6px 8px;color:#888;font-size:11px;text-transform:uppercase">' + c.h + '</th>'; }).join('') + '</tr>';
-  html += '<tr style="border-bottom:1px solid var(--sv-border);background:var(--sv-lightest)">' +
-    '<td style="padding:6px 8px;font-weight:700;color:#888">Goal</td><td></td>' +
-    cols.slice(2).map(function (c) { return '<td style="padding:6px 8px;color:#888">' + (c.goal != null ? c.goal.toLocaleString() : '\u2014') + '</td>'; }).join('') + '</tr>';
-  data.forEach(function (r) {
-    const dayLabel = new Date(r.ts).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
-    html += '<tr style="border-bottom:1px solid #F0F2F6;cursor:pointer" onclick="showDayDetailModal(svPatients.find(x=>x.id===\'' + p.id + '\'),{ts:' + r.ts + ',sbp:' + (r.sbp ?? 'null') + ',dbp:' + (r.dbp ?? 'null') + ',riskScore:null})">' +
-      '<td style="padding:6px 8px;font-weight:600">' + dayLabel + '</td>' +
-      '<td style="padding:6px 8px">' + (r.sbp != null ? (r.sbp + '/' + r.dbp) : '\u2014') + '</td>' +
-      cols.slice(2).map(function (c) {
-        const val = r[c.key];
-        return '<td style="padding:6px 8px;' + cellClass(val, c.goal) + '">' + (val != null ? val.toLocaleString() : '\u2014') + '</td>';
-      }).join('') + '</tr>';
-  });
-  tableEl.innerHTML = html;
 }
 
 function renderVitalsCompare(pid) {
@@ -4776,9 +4742,6 @@ function renderVitalsCompare(pid) {
   refreshCompareChartSizes();
   requestAnimationFrame(refreshCompareChartSizes);
   setTimeout(refreshCompareChartSizes, 150);
-
-  const goals = nutrGetGoalsForPid(pid);
-  renderCompareTable(p, data, goals);
 }
 
 // ── SMART CARE PLAN PRE-SELECTION ──
