@@ -252,7 +252,8 @@
   }
   .tab-btn.active { background: var(--card); color: var(--navy); box-shadow: 0 1px 4px rgba(0,0,0,0.08); }
 </style>
-<script src="data-engine.js?v=1789174333"></script>
+<script src="supabase-client.js"></script>
+<script src="data-engine.js?v=1789175543"></script>
 </head>
 <body>
 
@@ -692,6 +693,7 @@ function getLog(pid, date) {
 }
 function saveLog(pid, date, log) {
   localStorage.setItem(dateKey(pid, date), JSON.stringify(log));
+  svPushNutritionLog(pid, date); // fire-and-forget push to the real backend
 }
 function getActs(pid, date) {
   try { return JSON.parse(localStorage.getItem(actKey(pid, date)) || '[]'); }
@@ -699,6 +701,56 @@ function getActs(pid, date) {
 }
 function saveActs(pid, date, acts) {
   localStorage.setItem(actKey(pid, date), JSON.stringify(acts));
+  svPushNutritionLog(pid, date); // fire-and-forget push to the real backend
+}
+
+// ── SUPABASE BACKEND — real cross-device sync ──
+// Local storage alone only works within one browser on one device. This
+// pushes every save to a real database as soon as it's entered, and pulls
+// down whatever's already there on login, so a patient logging food on
+// their phone is visible to a nurse on a completely different device —
+// not just simulated by sharing one browser's storage.
+const SV_SUPABASE_URL = 'https://ttcprqkoibiztibhpsrp.supabase.co';
+const SV_SUPABASE_KEY = 'sb_publishable_iQhPAY-M-OUbFVbLQyCp5g_540rSkd1';
+let _svClient = null;
+function svGetClient() {
+  if (_svClient) return _svClient;
+  if (typeof supabase === 'undefined') return null; // library failed to load — caller falls back to localStorage-only
+  _svClient = supabase.createClient(SV_SUPABASE_URL, SV_SUPABASE_KEY);
+  return _svClient;
+}
+
+async function svPushNutritionLog(pid, date) {
+  const sb = svGetClient();
+  if (!sb) return;
+  const log = getLog(pid, date);
+  const acts = getActs(pid, date);
+  try {
+    await sb.from('nutrition_logs').upsert({
+      patient_id: pid, log_date: date,
+      breakfast: log.breakfast, lunch: log.lunch, dinner: log.dinner, snacks: log.snacks,
+      activities: acts, updated_at: new Date().toISOString()
+    }, { onConflict: 'patient_id,log_date' });
+  } catch (e) { console.warn('[SyncVitals] nutrition push failed, kept locally only:', e); }
+}
+
+// Pulls everything the backend has for this patient into localStorage —
+// called on login so a returning patient (or one switching devices) sees
+// their real history instead of whatever happens to be on this device.
+async function svPullNutritionForPatient(pid) {
+  const sb = svGetClient();
+  if (!sb) return;
+  try {
+    const { data, error } = await sb.from('nutrition_logs').select('*').eq('patient_id', pid);
+    if (error || !data) return;
+    data.forEach(function (row) {
+      const dateStr = row.log_date;
+      localStorage.setItem(dateKey(pid, dateStr), JSON.stringify({
+        breakfast: row.breakfast || [], lunch: row.lunch || [], dinner: row.dinner || [], snacks: row.snacks || []
+      }));
+      localStorage.setItem(actKey(pid, dateStr), JSON.stringify(row.activities || []));
+    });
+  } catch (e) { console.warn('[SyncVitals] nutrition pull failed, using local data only:', e); }
 }
 function getNutrPlan(pid) {
   try { return JSON.parse(localStorage.getItem(nutrKey(pid)) || 'null'); } catch(e) { return null; }
@@ -812,6 +864,9 @@ function launchApp(pid) {
   document.getElementById('s-login').classList.remove('active');
   document.getElementById('s-app').classList.add('active');
   renderDiary();
+  svPullNutritionForPatient(pid).then(function () {
+    if (currentPid === pid) renderDiary(); // refresh once real backend data has arrived
+  });
 }
 
 // ══════════════════════════════════════════════════

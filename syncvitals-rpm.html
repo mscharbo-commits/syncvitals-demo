@@ -379,8 +379,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 /* Platform Navigator */
 
 </style>
+<script src="supabase-client.js"></script>
 <script src="lightweight-charts.js"></script>
-<script src="data-engine.js?v=1789174333"></script>
+<script src="data-engine.js?v=1789175543"></script>
 </head>
 <body>
 
@@ -3207,8 +3208,59 @@ function nutrSeedHistoryIfEmptyRPM(p, days) {
 }
 
 document.addEventListener('DOMContentLoaded', function () {
-  svPatients.forEach(function (p) { nutrSeedHistoryIfEmptyRPM(p, 21); });
+  svPullAllNutritionFromSupabase().then(function () {
+    svPatients.forEach(function (p) { nutrSeedHistoryIfEmptyRPM(p, 21); }); // only fills genuine gaps — real data pulled above is never overwritten
+  });
+  svSubscribeNutritionRealtime();
 });
+
+// ── SUPABASE BACKEND — real cross-device sync ──
+// Mirrors the client setup in sv-patient-nutrition.html. Local storage
+// alone only works within one browser on one device — this pulls whatever
+// a patient has actually logged (from any device) into this nurse's view,
+// and subscribes to live updates so new entries show up without a refresh.
+const SV_SUPABASE_URL = 'https://ttcprqkoibiztibhpsrp.supabase.co';
+const SV_SUPABASE_KEY = 'sb_publishable_iQhPAY-M-OUbFVbLQyCp5g_540rSkd1';
+let _svClient = null;
+function svGetClient() {
+  if (_svClient) return _svClient;
+  if (typeof supabase === 'undefined') return null; // library failed to load — caller falls back to local/seeded data only
+  _svClient = supabase.createClient(SV_SUPABASE_URL, SV_SUPABASE_KEY);
+  return _svClient;
+}
+
+function svApplyNutritionRow(row) {
+  const pid = row.patient_id, dateStr = row.log_date;
+  localStorage.setItem('sv_nutr_log_' + pid + '_' + dateStr, JSON.stringify({
+    breakfast: row.breakfast || [], lunch: row.lunch || [], dinner: row.dinner || [], snacks: row.snacks || []
+  }));
+  localStorage.setItem('sv_nutr_act_' + pid + '_' + dateStr, JSON.stringify(row.activities || []));
+}
+
+async function svPullAllNutritionFromSupabase() {
+  const sb = svGetClient();
+  if (!sb) return;
+  try {
+    const { data, error } = await sb.from('nutrition_logs').select('*');
+    if (error || !data) return;
+    data.forEach(svApplyNutritionRow);
+  } catch (e) { console.warn('[SyncVitals] nutrition pull failed, using local/seeded data only:', e); }
+}
+
+// Live push: the moment a patient logs food on any device, this fires and
+// the nurse's screen updates without a refresh or polling delay.
+function svSubscribeNutritionRealtime() {
+  const sb = svGetClient();
+  if (!sb) return;
+  sb.channel('nutrition-logs-changes')
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'nutrition_logs' }, function (payload) {
+      if (!payload.new || !payload.new.patient_id) return;
+      svApplyNutritionRow(payload.new);
+      if (_nutrView === 'adherence' && _nutrCurrentPid === payload.new.patient_id) renderNutrAdherence(_nutrCurrentPid);
+      nutrUpdateQueueBadges();
+    })
+    .subscribe();
+}
 
 // ── SHARED ENGINE SYNC ──
 // Pulls live vitals/history/risk scores from the shared data engine
