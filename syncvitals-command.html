@@ -178,7 +178,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
 .btn-secondary { background:rgba(13,46,110,0.08); color:var(--navy); }
 .btn-secondary:hover { background:rgba(13,46,110,0.15); }
 </style>
-<script src="data-engine.js?v=1789255792"></script>
+<script src="data-engine.js?v=1789256048"></script>
 </head>
 <body>
 
@@ -495,7 +495,7 @@ function runAI(p) {
     summary: s.summary, top_concern: s.topConcern, action: s.action
   };
   s.predUpdated = new Date().toLocaleTimeString();
-  s.predSource = s.assessmentSource === 'predict' ? 'Predict AI' : 'Awaiting Predict AI (NEWS2-only baseline)';
+  s.predSource = s.assessmentSource === 'predict' ? 'Predict AI' : 'Awaiting Predict AI (vitals-score baseline)';
 }
 
 

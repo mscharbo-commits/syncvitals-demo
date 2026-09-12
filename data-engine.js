@@ -463,11 +463,11 @@
       : (p.conditions.includes('COPD') && v.fev1pct != null && v.fev1pct < 50) ? ('FEV\u2081 ' + v.fev1pct + '% \u2014 GOLD Stage ' + (v.fev1pct < 30 ? 'IV' : 'III'))
       : (p.conditions.includes('CHF') && p.baselineWeight != null && (v.weight - p.baselineWeight) >= 2) ? ('+' + (v.weight - p.baselineWeight).toFixed(1) + ' lbs since baseline \u2014 CHF fluid retention risk')
       : (p.conditions.includes('DM') && v.glucose > 180) ? ('Glucose ' + v.glucose + ' mg/dL above ADA target')
-      : news.band === 'high' ? ('NEWS2 ' + news.total + ' (high) \u2014 multi-system deterioration')
+      : news.band === 'high' ? ('Vitals score ' + news.total + ' (high) \u2014 multi-system deterioration')
       : (v.spo2 != null && v.spo2 < 90) ? ('SpO\u2082 critical low (' + v.spo2 + '%)')
       : (p.conditions.includes('HTN') && (v.sbp >= 180 || v.dbp >= 120)) ? ('Hypertensive crisis (SBP ' + v.sbp + '/' + v.dbp + ', AHA/ACC)')
       : p.deteriorating ? 'Trending up over recent readings' : 'Stable';
-    p.summary = p.name.split(' ')[0] + ' (' + p.dx + ') \u2014 NEWS2 ' + news.total + ' (' + news.band + '), composite risk ' + score + '/100, ER 48h ' + er + '%, admit 30d ' + hosp + '%. (Awaiting full Predict AI assessment)';
+    p.summary = p.name.split(' ')[0] + ' (' + p.dx + ') \u2014 vitals score ' + news.total + ' (' + news.band + '), composite risk ' + score + '/100, ER 48h ' + er + '%, admit 30d ' + hosp + '%. (Awaiting full Predict AI assessment)';
     p.action = news.band === 'high' || score >= 70 ? 'Contact physician now' : news.band === 'medium' || score >= 45 ? 'Notify physician within 4 hours' : 'Continue monitoring per care plan';
     p.source = 'engine';
   }
