@@ -381,7 +381,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 </style>
 <script src="supabase-client.js"></script>
 <script src="lightweight-charts.js"></script>
-<script src="data-engine.js?v=1789254157"></script>
+<script src="data-engine.js?v=1789254537"></script>
 </head>
 <body>
 
@@ -1078,8 +1078,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
         </div>
     </div>
     </div>
-    </div>
-  <div id="nt-compare" class="sv-tc">
+    <div id="nt-compare" class="sv-tc">
       <div id="nt-compare-content" style="padding:12px">
         <div style="font-size:12px;color:#aaa;padding:20px;text-align:center" id="nt-compare-empty">Select a patient to compare vitals, nutrition, and activity</div>
         <div id="nt-compare-body" style="display:none">
@@ -1107,6 +1106,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
         </div>
       </div>
     </div>
+</div>
+  
 </div>
 </div>
 
@@ -7415,29 +7416,7 @@ function svTab(el,name){
   if (trendCard) trendCard.style.display = hideOnCompare;
   if (statGrid) statGrid.style.display = hideOnCompare;
   if (escBox) escBox.style.display = hideOnCompare;
-  if (name === 'nt-compare') {
-    setTimeout(function() {
-      let dbg = document.getElementById('sv-debug-banner');
-      if (!dbg) {
-        dbg = document.createElement('div');
-        dbg.id = 'sv-debug-banner';
-        dbg.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:99999;background:yellow;color:black;font-size:10px;padding:6px;font-family:monospace;max-height:220px;overflow:auto';
-        document.body.appendChild(dbg);
-      }
-      function rc(sel) { const el = document.querySelector(sel); if (!el) return sel+'=missing'; const rect = el.getBoundingClientRect(); return sel+'[top='+Math.round(rect.top)+',h='+Math.round(rect.height)+']'; }
-      const active = document.getElementById('s-nurse-path');
-      const lines = [rc('.sv-topbar'), rc('.sv-sub'), rc('.nav-back'), rc('#np-meta-line')];
-      // Walk every direct child of .sv-content inside the active screen, in order
-      const content = active.querySelector('.sv-content');
-      if (content) {
-        Array.from(content.children).forEach(function(child, i) {
-          const rect = child.getBoundingClientRect();
-          lines.push(i + ':' + (child.id || child.className || child.tagName) + '[top=' + Math.round(rect.top) + ',h=' + Math.round(rect.height) + ']');
-        });
-      }
-      dbg.innerHTML = lines.join('<br>');
-    }, 500);
-  }
+
   if (name === 'nt-nutrition') {
     const pid = activePatientId || _nutrCurrentPid;
     if (pid) nutrLoadForPatient(pid);
