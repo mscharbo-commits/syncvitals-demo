@@ -381,7 +381,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 </style>
 <script src="supabase-client.js"></script>
 <script src="lightweight-charts.js"></script>
-<script src="data-engine.js?v=1789195635"></script>
+<script src="data-engine.js?v=1789195744"></script>
 </head>
 <body>
 
@@ -7436,7 +7436,11 @@ function svTab(el,name){
     const el2 = document.getElementById(name);
     const rect = el2 ? el2.getBoundingClientRect() : null;
     const activeEls = document.querySelectorAll('.sv-tc.active');
-    dbg.innerHTML = 'tab=' + name + ' | el.offsetHeight=' + (el2 ? el2.offsetHeight : 'n/a') + 'px | el.getBoundingClientRect().top=' + (rect ? Math.round(rect.top) : 'n/a') + 'px, height=' + (rect ? Math.round(rect.height) : 'n/a') + 'px<br>ACTIVE .sv-tc (' + activeEls.length + '): ' + Array.from(activeEls).map(function(e){
+    const tc = document.getElementById('np-trend-card');
+    const sg = document.querySelector('.sv-stat-grid');
+    const eb = document.getElementById('np-esc-box');
+    function info(label, x) { if (!x) return label+'=missing'; const r=x.getBoundingClientRect(); return label+'[display='+getComputedStyle(x).display+',top='+Math.round(r.top)+',h='+Math.round(r.height)+']'; }
+    dbg.innerHTML = 'tab=' + name + ' | el.offsetHeight=' + (el2 ? el2.offsetHeight : 'n/a') + 'px | el.getBoundingClientRect().top=' + (rect ? Math.round(rect.top) : 'n/a') + 'px, height=' + (rect ? Math.round(rect.height) : 'n/a') + 'px<br>' + info('trendCard',tc) + ' ' + info('statGrid',sg) + ' ' + info('escBox',eb) + '<br>ACTIVE .sv-tc (' + activeEls.length + '): ' + Array.from(activeEls).map(function(e){
       const r = e.getBoundingClientRect();
       return e.id + ' [top=' + Math.round(r.top) + ', height=' + Math.round(r.height) + ']';
     }).join(' | ');
