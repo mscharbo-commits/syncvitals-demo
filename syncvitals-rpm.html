@@ -381,7 +381,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 </style>
 <script src="supabase-client.js"></script>
 <script src="lightweight-charts.js"></script>
-<script src="data-engine.js?v=1789177298"></script>
+<script src="data-engine.js?v=1789177766"></script>
 </head>
 <body>
 
@@ -2931,7 +2931,7 @@ let svPatients = [
     id: 'P002', mrn: '00391', name: 'Robert Chen', age: 74,
     conditions: ['CHF','DM'], nurse: 'Nurse R. Santos',
     hasDiabetes: true, hasCHF: true,
-    lastVitals: { sbp: 148, dbp: 88, hr: 96, spo2: 93, weight: 203, temp: 98.8, glucose: 218, hba1c: 9.1, sodium: 3200 },
+    lastVitals: { sbp: 148, dbp: 88, hr: 96, spo2: 93, weight: 203, temp: 98.8, glucose: 218, hba1c: 9.1 },
     baselineWeight: 196, symptoms: ['edema','shortness of breath'], adherence: 'partial', alertLevel: 'crisis', carePlanPhase: 30,
     vitalHistory: [
       { ts: Date.now() - 86400000*3, sbp:142, dbp:85, weight:198 },
@@ -3315,6 +3315,16 @@ function svSyncFromEngine(state) {
     const ep = state.patients[p.id];
     if (!ep) { console.warn('[SyncVitals] no engine data for patient', p.id); return; }
     p.lastVitals = Object.assign({}, p.lastVitals, ep.vitals);
+    // sodium was a static hardcoded seed value (only ever set for one
+    // patient, never updated) driving ~10 different alerts/care-plan lines
+    // throughout this file. Replace it with the patient's actual logged
+    // intake for today so every consumer of p.lastVitals.sodium reflects
+    // real food-log data instead of a frozen mock number.
+    try {
+      const todayStr = new Date().toISOString().split('T')[0];
+      const todayTotals = nutrCalcTotals(nutrGetLog(p.id, todayStr));
+      p.lastVitals.sodium = todayTotals.sodium || null;
+    } catch (e) { p.lastVitals.sodium = null; }
     p.vitalHistory = ep.history.map(function (h) {
       return { ts: h.ts, sbp: h.sbp, dbp: h.dbp, hr: h.hr, weight: h.weight, spo2: h.spo2, glucose: h.glucose, potassium: h.potassium, egfr: h.egfr, fev1pct: h.fev1pct, riskScore: h.riskScore, readings: h.readings };
     });
@@ -3631,7 +3641,7 @@ function generateCarePlan(p) {
     if (p.adherence === 'no') lines.push('Patient reported skipping medications — review barriers and reinforce medication importance urgently.');
   } else if (v.sbp >= 140) {
     lines.push('📈 <strong>Elevated BP:</strong> SBP ' + v.sbp + '/' + v.dbp + ' mmHg — above target. Schedule follow-up within 48 hours.');
-    lines.push('Review sodium diary. Target <1,500 mg/day. Current estimated intake: ' + (v.sodium || '—') + ' mg.');
+    lines.push('Review sodium diary. Target <1,500 mg/day. Current logged intake: ' + (v.sodium || 'not yet logged today') + (v.sodium ? ' mg' : '') + '.');
   } else if (v.sbp) {
     lines.push('✅ <strong>BP controlled:</strong> ' + v.sbp + '/' + v.dbp + ' mmHg — within target range. Continue current regimen.');
   }
