@@ -381,7 +381,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 </style>
 <script src="supabase-client.js"></script>
 <script src="lightweight-charts.js"></script>
-<script src="data-engine.js?v=1789178832"></script>
+<script src="data-engine.js?v=1789191429"></script>
 </head>
 <body>
 
@@ -7847,7 +7847,7 @@ function nutrCalcTotals(log) {
 function nutrGetGoalsForPid(pid) {
   const plan = _nutrGetPlan(pid);
   const p = svPatients ? svPatients.find(x => x.id === pid) : null;
-  const defaults = p ? p.goals : {calories:1800,sodium:2300,potassium:4700,protein:65,carbs:225,sugar:50};
+  const defaults = p ? nutrDefaultGoalsForPatient(p) : {calories:1800,sodium:2300,potassium:4700,protein:65,carbs:225,sugar:50,phosphorus:null,fluid:2000};
   if (plan && plan.goals) {
     const g = plan.goals;
     return {
