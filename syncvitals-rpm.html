@@ -381,7 +381,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 </style>
 <script src="supabase-client.js"></script>
 <script src="lightweight-charts.js"></script>
-<script src="data-engine.js?v=1789254537"></script>
+<script src="data-engine.js?v=1789255000"></script>
 </head>
 <body>
 
@@ -1084,7 +1084,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
         <div id="nt-compare-body" style="display:none">
           <div style="font-size:14px;font-weight:700;color:var(--sv-navy);margin-bottom:2px">Vitals × Nutrition × Activity</div>
           <div style="font-size:12px;color:#888;margin-bottom:10px">Spot what's actually driving a change — diet and activity plotted against the same timeline as vitals.</div>
-          <div id="nt-compare-legend" style="display:flex;flex-direction:column;gap:6px;margin-bottom:14px"></div>
+          <div id="nt-compare-legend" style="display:flex;flex-direction:column;gap:6px;margin-bottom:14px;position:sticky;top:0;z-index:10;background:#fff;padding:8px 0;border-bottom:1px solid var(--sv-border)"></div>
 
           <div style="font-size:11px;font-weight:700;color:#185FA5;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:4px">Vitals</div>
           <div id="nt-compare-chart-vitals" style="width:100%"></div>
@@ -4522,7 +4522,7 @@ function renderTrendChart(p) {
 // -sourced datasets (shared vitals engine, Supabase-backed nutrition log,
 // activity log) onto one shared daily timeline.
 let _compareRangeDays = 14;
-let _compareCurrentData = [], _compareCurrentMetrics = { vitals: [], nutrition: [], activity: [] };
+let _compareCurrentData = [], _compareCurrentMetrics = { vitals: [], nutrition: [], activity: [] }, _compareCurrentGoals = {};
 // Each group's chart state, kept separate since these are independent chart
 // instances (real visual gap between sections) rather than panes on one chart.
 const _compareCharts = {
@@ -4669,27 +4669,46 @@ function refreshCompareChartSizes() {
   });
 }
 
+// Clinical/nutritional thresholds per metric — "high" metrics turn red when
+// OVER the limit (sodium, calories, BP, glucose...), "low" metrics (steps,
+// active minutes, SpO2) turn red when UNDER the limit, since low is what's
+// concerning for those.
+function isBreached(key, val, goals) {
+  if (val == null) return false;
+  const highLimits = {
+    sbp: 140, dbp: 90, hr: 100, bloodGlucose: 180,
+    sodium: goals.sodium, calories: goals.calories, dietPotassium: goals.potassium,
+    carbs: goals.carbs, sugar: goals.sugar, phosphorus: goals.phosphorus,
+  };
+  const lowLimits = { spo2: 92, steps: 4000, activityMin: 30 };
+  if (highLimits[key] != null && val > highLimits[key]) return true;
+  if (lowLimits[key] != null && val < lowLimits[key]) return true;
+  return false;
+}
+
 function renderCompareLegend(row) {
   const legendEl = document.getElementById('nt-compare-legend');
   if (!legendEl) return;
   const r = row || _compareCurrentData[_compareCurrentData.length - 1];
   if (!r) { legendEl.innerHTML = ''; return; }
-  const dateTag = row ? (' \u00b7 ' + new Date(row.ts).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })) : '';
-  function chip(color, label, value) {
+  const goals = _compareCurrentGoals || {};
+  function chip(color, label, value, breached) {
+    const valColor = breached ? '#A32D2D' : '#222';
     return '<span style="display:inline-flex;align-items:baseline;gap:5px;margin-right:14px;white-space:nowrap">' +
       '<span style="width:8px;height:8px;border-radius:2px;background:' + color + ';display:inline-block;flex-shrink:0"></span>' +
-      '<span style="font-size:14px;font-weight:700;color:#222">' + label + ': ' + value + '</span></span>';
+      '<span style="font-size:14px;font-weight:700;color:' + valColor + '">' + label + ': ' + value + (breached ? ' \u26a0' : '') + '</span></span>';
   }
   function row_(label, chips) {
     if (!chips) return '';
     return '<div style="display:flex;flex-wrap:wrap;align-items:baseline">' +
       '<span style="font-size:10px;font-weight:700;color:#aaa;text-transform:uppercase;margin-right:8px">' + label + '</span>' + chips + '</div>';
   }
-  const bpChip = chip('#185FA5', 'BP', (r.sbp != null ? r.sbp : '\u2014') + '/' + (r.dbp != null ? r.dbp : '\u2014') + ' mmHg');
+  const bpBreached = isBreached('sbp', r.sbp, goals) || isBreached('dbp', r.dbp, goals);
+  const bpChip = chip('#185FA5', 'BP', (r.sbp != null ? r.sbp : '\u2014') + '/' + (r.dbp != null ? r.dbp : '\u2014') + ' mmHg', bpBreached);
   function groupChips(metrics) {
     return metrics.map(function (m) {
       const val = r[m.key];
-      return chip(m.color, m.label, (val != null ? val.toLocaleString() : '\u2014') + (m.unit ? (' ' + m.unit) : ''));
+      return chip(m.color, m.label, (val != null ? val.toLocaleString() : '\u2014') + (m.unit ? (' ' + m.unit) : ''), isBreached(m.key, val, goals));
     }).join('');
   }
   const html = [
@@ -4723,6 +4742,7 @@ function renderVitalsCompare(pid) {
   const metrics = getCompareMetrics(p, data);
   _compareCurrentData = data;
   _compareCurrentMetrics = metrics;
+  _compareCurrentGoals = nutrGetGoalsForPid(pid);
 
   ensureGroupChart('vitals', 'nt-compare-chart-vitals', p, metrics.vitals, true);
   ensureGroupChart('nutrition', 'nt-compare-chart-nutrition', p, metrics.nutrition, false);
