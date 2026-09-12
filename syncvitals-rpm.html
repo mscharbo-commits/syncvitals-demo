@@ -381,7 +381,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 </style>
 <script src="supabase-client.js"></script>
 <script src="lightweight-charts.js"></script>
-<script src="data-engine.js?v=1789195744"></script>
+<script src="data-engine.js?v=1789195915"></script>
 </head>
 <body>
 
@@ -7444,6 +7444,13 @@ function svTab(el,name){
       const r = e.getBoundingClientRect();
       return e.id + ' [top=' + Math.round(r.top) + ', height=' + Math.round(r.height) + ']';
     }).join(' | ');
+    if (name === 'nt-compare' && el2 && el2.parentElement) {
+      const siblings = Array.from(el2.parentElement.children);
+      dbg.innerHTML += '<br>ALL SIBLINGS in parent: ' + siblings.map(function(s){
+        const r = s.getBoundingClientRect();
+        return (s.id || s.tagName) + '[top=' + Math.round(r.top) + ',h=' + Math.round(r.height) + ',display=' + getComputedStyle(s).display + ']';
+      }).join(' | ');
+    }
   }, 400);
 }
 function svInsert(txt){document.getElementById('sv-reply').value=txt}
