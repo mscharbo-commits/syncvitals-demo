@@ -381,7 +381,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 </style>
 <script src="supabase-client.js"></script>
 <script src="lightweight-charts.js"></script>
-<script src="data-engine.js?v=1789195915"></script>
+<script src="data-engine.js?v=1789196116"></script>
 </head>
 <body>
 
@@ -1080,13 +1080,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     </div>
 </button>
     </div>
-  </div>
-</div>
-
-    <div id="nt-compare" class="sv-tc">
-      <div id="nt-compare-content" style="padding:12px;border:3px solid red">
-        <div style="font-size:12px;color:#aaa;padding:20px;text-align:center;border:3px solid blue" id="nt-compare-empty">Select a patient to compare vitals, nutrition, and activity</div>
-        <div id="nt-compare-body" style="display:none;border:3px solid green">
+  <div id="nt-compare" class="sv-tc">
+      <div id="nt-compare-content" style="padding:12px">
+        <div style="font-size:12px;color:#aaa;padding:20px;text-align:center" id="nt-compare-empty">Select a patient to compare vitals, nutrition, and activity</div>
+        <div id="nt-compare-body" style="display:none">
           <div style="font-size:14px;font-weight:700;color:var(--sv-navy);margin-bottom:2px">Vitals × Nutrition × Activity</div>
           <div style="font-size:12px;color:#888;margin-bottom:10px">Spot what's actually driving a change — diet and activity plotted against the same timeline as vitals.</div>
           <div id="nt-compare-legend" style="display:flex;flex-direction:column;gap:6px;margin-bottom:14px"></div>
@@ -1111,6 +1108,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
         </div>
       </div>
     </div>
+</div>
+</div>
+
+    
 
 <!-- NURSE DONE -->
 <div id="s-nurse-done" class="screen">
@@ -7423,35 +7424,6 @@ function svTab(el,name){
     const pid = activePatientId || _nutrCurrentPid;
     if (pid) renderVitalsCompare(pid);
   }
-  // TEMP DEBUG: show exactly which .sv-tc elements are active anywhere on
-  // the page, their parent, and rendered height AFTER content has settled.
-  setTimeout(function() {
-    let dbg = document.getElementById('sv-debug-banner');
-    if (!dbg) {
-      dbg = document.createElement('div');
-      dbg.id = 'sv-debug-banner';
-      dbg.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:99999;background:yellow;color:black;font-size:11px;padding:6px;font-family:monospace;max-height:160px;overflow:auto';
-      document.body.appendChild(dbg);
-    }
-    const el2 = document.getElementById(name);
-    const rect = el2 ? el2.getBoundingClientRect() : null;
-    const activeEls = document.querySelectorAll('.sv-tc.active');
-    const tc = document.getElementById('np-trend-card');
-    const sg = document.querySelector('.sv-stat-grid');
-    const eb = document.getElementById('np-esc-box');
-    function info(label, x) { if (!x) return label+'=missing'; const r=x.getBoundingClientRect(); return label+'[display='+getComputedStyle(x).display+',top='+Math.round(r.top)+',h='+Math.round(r.height)+']'; }
-    dbg.innerHTML = 'tab=' + name + ' | el.offsetHeight=' + (el2 ? el2.offsetHeight : 'n/a') + 'px | el.getBoundingClientRect().top=' + (rect ? Math.round(rect.top) : 'n/a') + 'px, height=' + (rect ? Math.round(rect.height) : 'n/a') + 'px<br>' + info('trendCard',tc) + ' ' + info('statGrid',sg) + ' ' + info('escBox',eb) + '<br>ACTIVE .sv-tc (' + activeEls.length + '): ' + Array.from(activeEls).map(function(e){
-      const r = e.getBoundingClientRect();
-      return e.id + ' [top=' + Math.round(r.top) + ', height=' + Math.round(r.height) + ']';
-    }).join(' | ');
-    if (name === 'nt-compare' && el2 && el2.parentElement) {
-      const siblings = Array.from(el2.parentElement.children);
-      dbg.innerHTML += '<br>ALL SIBLINGS in parent: ' + siblings.map(function(s){
-        const r = s.getBoundingClientRect();
-        return (s.id || s.tagName) + '[top=' + Math.round(r.top) + ',h=' + Math.round(r.height) + ',display=' + getComputedStyle(s).display + ']';
-      }).join(' | ');
-    }
-  }, 400);
 }
 function svInsert(txt){document.getElementById('sv-reply').value=txt}
 function svSend(){
