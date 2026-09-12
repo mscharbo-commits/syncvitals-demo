@@ -381,7 +381,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 </style>
 <script src="supabase-client.js"></script>
 <script src="lightweight-charts.js"></script>
-<script src="data-engine.js?v=1789176660"></script>
+<script src="data-engine.js?v=1789176863"></script>
 </head>
 <body>
 
@@ -3210,6 +3210,7 @@ function nutrSeedHistoryIfEmptyRPM(p, days) {
 document.addEventListener('DOMContentLoaded', function () {
   svPullAllNutritionFromSupabase().then(function () {
     svPatients.forEach(function (p) { nutrSeedHistoryIfEmptyRPM(p, 21); }); // only fills genuine gaps — real data pulled above is never overwritten
+    return svMigrateLocalNutritionToSupabase(); // one-time: push everything now in localStorage (seeded + real) up to the real database
   });
   svSubscribeNutritionRealtime();
 });
@@ -3245,6 +3246,45 @@ async function svPullAllNutritionFromSupabase() {
     if (error || !data) return;
     data.forEach(svApplyNutritionRow);
   } catch (e) { console.warn('[SyncVitals] nutrition pull failed, using local/seeded data only:', e); }
+}
+
+// One-time migration: everything already sitting in localStorage (including
+// the 21-day seeded history) gets pushed up to the real database. Runs once
+// per browser — after this, saveLog/saveActs push new entries as they
+// happen, so this isn't needed again unless a NEW browser/device is used
+// with local-only data that hasn't been synced yet.
+const SV_MIGRATION_FLAG = 'sv_nutr_migrated_v1';
+async function svMigrateLocalNutritionToSupabase() {
+  const sb = svGetClient();
+  if (!sb || localStorage.getItem(SV_MIGRATION_FLAG)) return;
+  const rows = {}; // keyed by "pid_date" so a log + its activities merge into one row
+  for (let i = 0; i < localStorage.length; i++) {
+    const key = localStorage.key(i);
+    if (key.indexOf('sv_nutr_log_') === 0) {
+      const rest = key.slice('sv_nutr_log_'.length);
+      const us = rest.indexOf('_');
+      const pid = rest.slice(0, us), dateStr = rest.slice(us + 1);
+      const log = JSON.parse(localStorage.getItem(key) || '{}');
+      const rowKey = pid + '_' + dateStr;
+      rows[rowKey] = Object.assign({ patient_id: pid, log_date: dateStr }, rows[rowKey], {
+        breakfast: log.breakfast || [], lunch: log.lunch || [], dinner: log.dinner || [], snacks: log.snacks || []
+      });
+    } else if (key.indexOf('sv_nutr_act_') === 0) {
+      const rest = key.slice('sv_nutr_act_'.length);
+      const us = rest.indexOf('_');
+      const pid = rest.slice(0, us), dateStr = rest.slice(us + 1);
+      const acts = JSON.parse(localStorage.getItem(key) || '[]');
+      const rowKey = pid + '_' + dateStr;
+      rows[rowKey] = Object.assign({ patient_id: pid, log_date: dateStr }, rows[rowKey], { activities: acts });
+    }
+  }
+  const upserts = Object.values(rows);
+  if (!upserts.length) { localStorage.setItem(SV_MIGRATION_FLAG, '1'); return; }
+  try {
+    const { error } = await sb.from('nutrition_logs').upsert(upserts, { onConflict: 'patient_id,log_date' });
+    if (!error) { localStorage.setItem(SV_MIGRATION_FLAG, '1'); console.log('[SyncVitals] migrated', upserts.length, 'existing nutrition days to Supabase'); }
+    else console.warn('[SyncVitals] migration upsert error:', error);
+  } catch (e) { console.warn('[SyncVitals] migration failed, will retry next load:', e); }
 }
 
 // Live push: the moment a patient logs food on any device, this fires and
