@@ -380,7 +380,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 
 </style>
 <script src="lightweight-charts.js"></script>
-<script src="data-engine.js?v=1789173645"></script>
+<script src="data-engine.js?v=1789174333"></script>
 </head>
 <body>
 
@@ -3133,6 +3133,82 @@ let svPatients = [
     recommend: 'Non-starchy vegetables, whole grains, lean protein, nuts in moderation',
     baseVitals: { glucose:176, hba1c:7.6, sbp:134, dbp:82, bmi:29.8, ldl:110, egfr:88, creatinine:0.9, adherence:65 }
   },];
+
+// ── NUTRITION HISTORY SEED (Nurse Portal copy) ──
+// The Patient Nutrition Portal has its own seeder, but it only ever runs
+// if that separate page is opened directly. A nurse who only ever uses
+// this portal would otherwise see "no nutrition history" for every
+// patient even though the platform is designed to always have some —
+// so this duplicates that seeding here, keyed off svPatients directly
+// (no dependency on the other portal ever loading), using the exact same
+// localStorage keys so real logged data and either seeder are interchangeable.
+function nutrDefaultGoalsForPatient(p) {
+  if (p.goals) return p.goals; // patients that already carry an explicit goals object
+  const conds = (p.conditions || []).map(c => String(c).toUpperCase());
+  const hasCKD = conds.includes('CKD'), hasCHF = conds.includes('CHF'), hasDM = conds.includes('DM');
+  return {
+    calories: 1800,
+    sodium: hasCHF ? 1500 : hasCKD ? 2000 : 2300,
+    potassium: hasCKD ? 2800 : 4700,
+    protein: hasCKD ? 55 : 65,
+    carbs: hasDM ? 130 : 200,
+    fluid: hasCHF ? 1500 : 2000,
+    phosphorus: hasCKD ? 800 : null,
+    sugar: hasDM ? 25 : 40
+  };
+}
+
+function nutrSeedDayRPM(pid, dateStr, violateChance, goals) {
+  const jitter = (base, pct) => base * (1 + (Math.random() - 0.5) * 2 * pct);
+  const violate = Math.random() < violateChance;
+  function target(goalVal, fallback) {
+    const g = goalVal || fallback;
+    const mult = violate ? (1.05 + Math.random() * 0.35) : (0.55 + Math.random() * 0.4);
+    return Math.max(0, Math.round(jitter(g * mult, 0.08)));
+  }
+  const dayTotals = {
+    calories: target(goals.calories, 1800), sodium: target(goals.sodium, 2300),
+    potassium: target(goals.potassium, 3500), protein: Math.round(jitter(goals.protein || 60, 0.2)),
+    carbs: Math.round(jitter(goals.carbs || 180, 0.2)), sugar: target(goals.sugar, 40),
+    fat: Math.round(jitter(60, 0.25)), phosphorus: goals.phosphorus ? Math.round(jitter(goals.phosphorus, 0.2)) : 0
+  };
+  const split = { breakfast: 0.28, lunch: 0.36, dinner: 0.36 };
+  const log = { breakfast: [], lunch: [], dinner: [], snacks: [] };
+  Object.keys(split).forEach(meal => {
+    const f = split[meal];
+    log[meal].push({
+      name: 'Logged meal', grams: 100, baseGrams: 100,
+      cal: Math.round(dayTotals.calories * f), sodium: Math.round(dayTotals.sodium * f),
+      potassium: Math.round(dayTotals.potassium * f), protein: Math.round(dayTotals.protein * f),
+      carbs: Math.round(dayTotals.carbs * f), sugar: Math.round(dayTotals.sugar * f),
+      fat: Math.round(dayTotals.fat * f), phosphorus: Math.round(dayTotals.phosphorus * f)
+    });
+  });
+  localStorage.setItem('sv_nutr_log_' + pid + '_' + dateStr, JSON.stringify(log));
+  const steps = Math.round(jitter(violate ? 2200 : 4500, 0.3));
+  localStorage.setItem('sv_nutr_act_' + pid + '_' + dateStr, JSON.stringify([{
+    type: 'walk', steps: Math.max(300, steps), duration: Math.round(jitter(25, 0.4)), calBurned: Math.round(steps * 0.04)
+  }]));
+}
+
+function nutrSeedHistoryIfEmptyRPM(p, days) {
+  days = days || 21;
+  const checkDate = new Date(); checkDate.setDate(checkDate.getDate() - (days - 1));
+  const checkStr = checkDate.toISOString().split('T')[0];
+  if (localStorage.getItem('sv_nutr_log_' + p.id + '_' + checkStr)) return; // already seeded
+  const goals = nutrDefaultGoalsForPatient(p);
+  const violateChance = p.deteriorating ? 0.4 : 0.12;
+  for (let i = days; i >= 1; i--) { // stop at 1 — never touch today (i=0)
+    const d = new Date(); d.setDate(d.getDate() - i);
+    const dateStr = d.toISOString().split('T')[0];
+    if (localStorage.getItem('sv_nutr_log_' + p.id + '_' + dateStr)) continue; // don't overwrite real entries
+    nutrSeedDayRPM(p.id, dateStr, violateChance, goals);
+  }
+}
+
+document.addEventListener('DOMContentLoaded', function () {
+  svPatients.forEach(function (p) { nutrSeedHistoryIfEmptyRPM(p, 21); });
+});
 
 // ── SHARED ENGINE SYNC ──
 // Pulls live vitals/history/risk scores from the shared data engine
