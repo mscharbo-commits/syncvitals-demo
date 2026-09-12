@@ -1,5 +1,6 @@
 -- SyncVitals: nutrition_logs table
--- Run this once in Supabase SQL Editor (Project: ttcprqkoibiztibhpsrp)
+-- Project: qbaougugtogrybssgjwb (dedicated SyncVitals Supabase project)
+-- Already applied via Supabase MCP on 2026-09-12 — kept here for reference/reproducibility.
 
 create table if not exists nutrition_logs (
   id uuid primary key default gen_random_uuid(),
