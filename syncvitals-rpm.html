@@ -381,7 +381,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 </style>
 <script src="supabase-client.js"></script>
 <script src="lightweight-charts.js"></script>
-<script src="data-engine.js?v=1789193277"></script>
+<script src="data-engine.js?v=1789193558"></script>
 </head>
 <body>
 
@@ -4535,6 +4535,8 @@ const _compareCharts = {
 };
 const COMPARE_METRIC_DEFS = {
   vitals: [
+    { key: 'hr', label: 'Heart Rate', unit: 'bpm', color: '#D97B4F' },
+    { key: 'spo2', label: 'SpO\u2082', unit: '%', color: '#2AA37A' },
     { key: 'weight', label: 'Weight', unit: 'lbs', color: '#7C5CBF', condition: 'CHF' },
     { key: 'bloodGlucose', label: 'Blood Glucose', unit: 'mg/dL', color: '#C25450', condition: 'DM' },
   ],
@@ -4580,7 +4582,7 @@ function buildCompareData(p, days) {
     const activityMin = acts.reduce(function (s, a) { return s + (a.duration || 0); }, 0);
     rows.push({
       dateStr: dateStr, ts: d.getTime(),
-      sbp: v.sbp, dbp: v.dbp, weight: v.weight, bloodGlucose: v.glucose,
+      sbp: v.sbp, dbp: v.dbp, hr: v.hr, spo2: v.spo2, weight: v.weight, bloodGlucose: v.glucose,
       calories: totals.calories || null, sodium: totals.sodium || null,
       dietPotassium: totals.potassium || null, protein: totals.protein || null,
       carbs: totals.carbs || null, sugar: totals.sugar || null, fat: totals.fat || null,
