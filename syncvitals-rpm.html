@@ -381,7 +381,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 </style>
 <script src="supabase-client.js"></script>
 <script src="lightweight-charts.js"></script>
-<script src="data-engine.js?v=1789194787"></script>
+<script src="data-engine.js?v=1789195013"></script>
 </head>
 <body>
 
@@ -1088,7 +1088,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
         <div style="font-size:12px;color:#aaa;padding:20px;text-align:center" id="nt-compare-empty">Select a patient to compare vitals, nutrition, and activity</div>
         <div id="nt-compare-body" style="display:none">
           <div style="font-size:14px;font-weight:700;color:var(--sv-navy);margin-bottom:2px">Vitals × Nutrition × Activity</div>
-          <div style="font-size:12px;color:#888;margin-bottom:10px">Spot what's actually driving a change \u2014 diet and activity plotted against the same timeline as vitals.</div>
+          <div style="font-size:12px;color:#888;margin-bottom:10px">Spot what's actually driving a change — diet and activity plotted against the same timeline as vitals.</div>
           <div id="nt-compare-legend" style="display:flex;flex-direction:column;gap:6px;margin-bottom:14px"></div>
 
           <div style="font-size:11px;font-weight:700;color:#185FA5;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:4px">Vitals</div>
@@ -7404,11 +7404,17 @@ function svTab(el,name){
   const parent=bar.parentElement;
   parent.querySelectorAll('.sv-tc').forEach(t=>t.classList.remove('active'));
   document.getElementById(name).classList.add('active');
-  // The top Vitals Trend card is always visible above the tabs, but Vitals
-  // Compare has its own Vitals section covering the same BP/HR/SpO2/Weight
-  // /Glucose data — showing both at once is pure duplication.
+  // The top Vitals Trend card, stat grid, and escalation box are always
+  // visible above the tabs, but Vitals Compare has its own Vitals section
+  // and legend covering the same ground — showing both leaves a redundant
+  // blank-feeling gap. Hide all three specifically on this tab.
   const trendCard = document.getElementById('np-trend-card');
-  if (trendCard) trendCard.style.display = (name === 'nt-compare') ? 'none' : '';
+  const statGrid = document.querySelector('.sv-stat-grid');
+  const escBox = document.getElementById('np-esc-box');
+  const hideOnCompare = (name === 'nt-compare') ? 'none' : '';
+  if (trendCard) trendCard.style.display = hideOnCompare;
+  if (statGrid) statGrid.style.display = hideOnCompare;
+  if (escBox) escBox.style.display = hideOnCompare;
   if (name === 'nt-nutrition') {
     const pid = activePatientId || _nutrCurrentPid;
     if (pid) nutrLoadForPatient(pid);
