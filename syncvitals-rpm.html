@@ -381,7 +381,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 </style>
 <script src="supabase-client.js"></script>
 <script src="lightweight-charts.js"></script>
-<script src="data-engine.js?v=1789253281"></script>
+<script src="data-engine.js?v=1789254070"></script>
 </head>
 <body>
 
@@ -7424,9 +7424,14 @@ function svTab(el,name){
         dbg.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:99999;background:yellow;color:black;font-size:10px;padding:6px;font-family:monospace;max-height:200px;overflow:auto';
         document.body.appendChild(dbg);
       }
-      function r(id) { const el = document.getElementById(id); if (!el) return id+'=missing'; const rect = el.getBoundingClientRect(); return id+'[top='+Math.round(rect.top)+',h='+Math.round(rect.height)+',display='+getComputedStyle(el).display+']'; }
-      function rc(sel) { const el = document.querySelector(sel); if (!el) return sel+'=missing'; const rect = el.getBoundingClientRect(); return sel+'[top='+Math.round(rect.top)+',h='+Math.round(rect.height)+',display='+getComputedStyle(el).display+']'; }
-      dbg.innerHTML = [rc('.sv-stat-grid'), r('np-esc-box'), r('nt-risk'), r('nt-actions'), r('nt-careplan'), r('nt-9090'), r('nt-ai'), r('nt-doc'), r('nt-nutrition'), r('nt-compare')].join('<br>');
+      const activeScreens = document.querySelectorAll('.screen.active');
+      const lines = ['ACTIVE .screen elements (' + activeScreens.length + '):'];
+      activeScreens.forEach(function(el) {
+        const rect = el.getBoundingClientRect();
+        lines.push(el.id + '[top=' + Math.round(rect.top) + ',h=' + Math.round(rect.height) + ']');
+      });
+      lines.push('body.scrollHeight=' + document.body.scrollHeight + ', body children count=' + document.body.children.length);
+      dbg.innerHTML = lines.join('<br>');
     }, 500);
   }
   if (name === 'nt-nutrition') {
