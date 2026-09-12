@@ -381,7 +381,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 </style>
 <script src="supabase-client.js"></script>
 <script src="lightweight-charts.js"></script>
-<script src="data-engine.js?v=1789191429"></script>
+<script src="data-engine.js?v=1789192280"></script>
 </head>
 <body>
 
@@ -541,6 +541,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
       <div class="sv-tab" onclick="svTab(this,'nt-9090')">30/60/90</div>
       <div class="sv-tab" onclick="svTab(this,'nt-ai')">🏥 Admissions</div>
       <div class="sv-tab" onclick="svTab(this,'nt-nutrition')">🥗 Nutrition <span id="nutr-tab-badge" style="display:none;background:#E24B4A;color:#fff;font-size:9px;font-weight:700;padding:1px 5px;border-radius:10px;margin-left:3px;vertical-align:middle"></span></div>
+      <div class="sv-tab" onclick="svTab(this,'nt-compare')">📊 Vitals Compare</div>
       <div class="sv-tab" onclick="svTab(this,'nt-doc')">Document</div>
     </div>
 
@@ -1080,6 +1081,29 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     </div>
   </div>
 </div>
+
+    <div id="nt-compare" class="sv-tc">
+      <div id="nt-compare-content" style="padding:12px">
+        <div style="font-size:12px;color:#aaa;padding:20px;text-align:center" id="nt-compare-empty">Select a patient to compare vitals, nutrition, and activity</div>
+        <div id="nt-compare-body" style="display:none">
+          <div style="font-size:14px;font-weight:700;color:var(--sv-navy);margin-bottom:2px">Vitals \u00d7 Nutrition \u00d7 Activity</div>
+          <div style="font-size:12px;color:#888;margin-bottom:10px">Spot what's actually driving a change \u2014 diet and activity plotted against the same timeline as vitals.</div>
+          <div id="nt-compare-legend" style="display:flex;flex-direction:column;gap:6px;margin-bottom:10px"></div>
+          <div id="nt-compare-chart" style="width:100%"></div>
+          <div class="sv-trend-range" id="nt-compare-range">
+            <button data-days="7" onclick="setCompareRange(7)">7D</button>
+            <button data-days="14" onclick="setCompareRange(14)">14D</button>
+            <button data-days="30" onclick="setCompareRange(30)">30D</button>
+          </div>
+          <div style="font-size:9px;color:#ccc;margin-top:4px;text-align:right">Charts by <a href="https://www.tradingview.com/" target="_blank" rel="noopener" style="color:#ccc">TradingView</a></div>
+          <div style="font-size:13px;font-weight:700;color:var(--sv-navy);margin:18px 0 4px">Daily Log</div>
+          <div style="font-size:11px;color:#888;margin-bottom:8px">Red = over goal &middot; Amber = 90%+ of goal</div>
+          <div style="overflow-x:auto">
+            <table id="nt-compare-table" style="width:100%;border-collapse:collapse;font-size:12px;white-space:nowrap"></table>
+          </div>
+        </div>
+      </div>
+    </div>
 
 <!-- NURSE DONE -->
 <div id="s-nurse-done" class="screen">
@@ -4483,6 +4507,210 @@ function renderTrendChart(p) {
   }
 }
 
+// ── VITALS × NUTRITION × ACTIVITY COMPARISON ──
+// A separate, standalone view (its own chart instance, not the BP trend
+// chart) built specifically to spot correlations — e.g. a sodium spike
+// followed by a BP rise a day or two later. Merges three independently
+// -sourced datasets (shared vitals engine, Supabase-backed nutrition log,
+// activity log) onto one shared daily timeline.
+let _compareRangeDays = 14;
+let _compareChart = null, _compareChartKey = null, _compareSbpSeries = null, _compareDbpSeries = null, _comparePaneSeries = {};
+let _compareCurrentData = [], _compareCurrentMetrics = [];
+const COMPARE_METRIC_DEFS = [
+  { key: 'sodium', label: 'Sodium (diet)', unit: 'mg', color: '#E09B3D' },
+  { key: 'calories', label: 'Calories', unit: 'kcal', color: '#1D9E75' },
+  { key: 'steps', label: 'Steps', unit: '', color: '#26A69A' },
+  { key: 'weight', label: 'Weight', unit: 'lbs', color: '#7C5CBF', condition: 'CHF' },
+  { key: 'bloodGlucose', label: 'Blood Glucose', unit: 'mg/dL', color: '#C25450', condition: 'DM' },
+];
+
+function setCompareRange(days) {
+  _compareRangeDays = days;
+  document.querySelectorAll('#nt-compare-range button').forEach(function(b){ b.classList.toggle('active', +b.dataset.days === days); });
+  renderVitalsCompare(_nutrCurrentPid || activePatientId);
+}
+
+// Note: nutrition's own `potassium` field is DIETARY intake (mg) — a
+// completely different thing from the blood potassium lab value (mEq/L)
+// already shown on the main vitals chart. Named distinctly here to avoid
+// conflating the two when reading this data.
+function buildCompareData(p, days) {
+  const vitalsByDate = {};
+  bucketHistoryByDay(p.vitalHistory || []).forEach(function (v) {
+    vitalsByDate[new Date(v.ts).toISOString().slice(0, 10)] = v;
+  });
+  const rows = [];
+  for (let i = days - 1; i >= 0; i--) {
+    const d = new Date(); d.setDate(d.getDate() - i); d.setHours(0, 0, 0, 0);
+    const dateStr = d.toISOString().slice(0, 10);
+    const v = vitalsByDate[dateStr] || {};
+    const totals = nutrCalcTotals(nutrGetLog(p.id, dateStr));
+    const steps = (nutrGetActs(p.id, dateStr) || []).reduce(function (s, a) { return s + (a.steps || 0); }, 0);
+    rows.push({
+      dateStr: dateStr, ts: d.getTime(),
+      sbp: v.sbp, dbp: v.dbp, weight: v.weight, bloodGlucose: v.glucose,
+      calories: totals.calories || null, sodium: totals.sodium || null,
+      dietPotassium: totals.potassium || null, protein: totals.protein || null,
+      carbs: totals.carbs || null, sugar: totals.sugar || null, fat: totals.fat || null,
+      steps: steps || null
+    });
+  }
+  return rows;
+}
+
+function getCompareMetrics(p, data) {
+  const conditions = p.conditions || [];
+  return COMPARE_METRIC_DEFS.filter(function (d) {
+    if (d.condition && conditions.indexOf(d.condition) === -1) return false;
+    return data.some(function (row) { return row[d.key] != null; });
+  });
+}
+
+function ensureCompareChart(p, metrics) {
+  if (typeof LightweightCharts === 'undefined') return;
+  const el = document.getElementById('nt-compare-chart');
+  if (!el) return;
+  const key = p.id + ':' + metrics.map(function (m) { return m.key; }).join(',');
+  if (_compareChart && _compareChartKey === key) return;
+  if (_compareChart) { try { _compareChart.remove(); } catch (e) {} _compareChart = null; }
+
+  const totalHeight = 120 + metrics.length * 70;
+  el.style.height = totalHeight + 'px';
+  el.innerHTML = '';
+  _compareChart = LightweightCharts.createChart(el, {
+    width: el.clientWidth || 320,
+    height: totalHeight,
+    layout: { background: { type: 'solid', color: 'transparent' }, textColor: '#888', fontFamily: 'inherit', fontSize: 11,
+      panes: { separatorColor: '#D5DCE8', separatorHoverColor: '#B8C4DA' } },
+    grid: { vertLines: { visible: false }, horzLines: { color: '#F0F2F6' } },
+    rightPriceScale: { borderVisible: false },
+    timeScale: { borderVisible: false, timeVisible: false, secondsVisible: false },
+    crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
+    handleScroll: false,
+    handleScale: { mouseWheel: false, pinch: true, axisPressedMouseMove: false },
+  });
+  _compareSbpSeries = _compareChart.addSeries(LightweightCharts.AreaSeries, {
+    lineColor: '#185FA5', topColor: 'rgba(24,95,165,0.28)', bottomColor: 'rgba(24,95,165,0.02)',
+    lineWidth: 2, priceLineVisible: false, title: 'Systolic (mmHg)'
+  }, 0);
+  _compareDbpSeries = _compareChart.addSeries(LightweightCharts.LineSeries, {
+    color: '#A8C8EC', lineWidth: 1, lineStyle: LightweightCharts.LineStyle.Dashed,
+    priceLineVisible: false, lastValueVisible: false, title: 'Diastolic (mmHg)'
+  }, 0);
+  _comparePaneSeries = {};
+  metrics.forEach(function (m, i) {
+    _comparePaneSeries[m.key] = _compareChart.addSeries(LightweightCharts.LineSeries, {
+      color: m.color, lineWidth: 2, priceLineVisible: false, title: m.label + (m.unit ? ' (' + m.unit + ')' : '')
+    }, i + 1);
+  });
+  _compareChartKey = key;
+  _compareChart.subscribeCrosshairMove(onCompareCrosshairMove);
+  new ResizeObserver(function () {
+    if (_compareChart && el.clientWidth > 0) _compareChart.applyOptions({ width: el.clientWidth });
+  }).observe(el);
+}
+
+function refreshCompareChartSize() {
+  const el = document.getElementById('nt-compare-chart');
+  if (!_compareChart || !el || !el.clientWidth) return;
+  _compareChart.applyOptions({ width: el.clientWidth });
+  _compareChart.timeScale().fitContent();
+}
+
+function renderCompareLegend(row) {
+  const legendEl = document.getElementById('nt-compare-legend');
+  if (!legendEl) return;
+  const r = row || _compareCurrentData[_compareCurrentData.length - 1];
+  if (!r) { legendEl.innerHTML = ''; return; }
+  const dateTag = row ? (' \u00b7 ' + new Date(row.ts).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })) : '';
+  function line(color, label, value) {
+    return '<div style="display:flex;align-items:baseline;gap:8px">' +
+      '<span style="width:10px;height:10px;border-radius:2px;background:' + color + ';display:inline-block;flex-shrink:0"></span>' +
+      '<span style="font-size:17px;font-weight:700;color:#222">' + label + ': ' + value + '</span></div>';
+  }
+  const bpLine = line('#185FA5', 'BP', (r.sbp != null ? r.sbp : '\u2014') + '/' + (r.dbp != null ? r.dbp : '\u2014') + ' mmHg' + dateTag);
+  const metricLines = _compareChart ? _compareCurrentMetrics.map(function (m) {
+    const val = r[m.key];
+    return line(m.color, m.label, (val != null ? val : '\u2014') + (m.unit ? (' ' + m.unit) : '') + (row ? dateTag : ''));
+  }) : [];
+  legendEl.innerHTML = [bpLine].concat(metricLines).join('');
+}
+
+function onCompareCrosshairMove(param) {
+  if (!param || !param.time) { renderCompareLegend(null); return; }
+  const row = _compareCurrentData.find(function (r) { return r.dateStr === param.time; });
+  renderCompareLegend(row || null);
+}
+
+function renderCompareTable(p, data, goals) {
+  const tableEl = document.getElementById('nt-compare-table');
+  if (!tableEl) return;
+  function cellClass(val, goal) {
+    if (val == null || !goal) return '';
+    if (val > goal) return 'color:#A32D2D;font-weight:700';
+    if (val > goal * 0.9) return 'color:#B8860B;font-weight:600';
+    return '';
+  }
+  let html = '<tr style="border-bottom:2px solid var(--sv-border)">' +
+    ['Date', 'BP', 'Cal', 'Na mg', 'Steps', 'Pro g', 'Carb g', 'Sug g'].map(function (h) {
+      return '<th style="text-align:left;padding:6px 8px;color:#888;font-size:11px;text-transform:uppercase">' + h + '</th>';
+    }).join('') + '</tr>';
+  html += '<tr style="border-bottom:1px solid var(--sv-border);background:var(--sv-lightest)">' +
+    '<td style="padding:6px 8px;font-weight:700;color:#888">Goal</td><td></td>' +
+    '<td style="padding:6px 8px;color:#888">' + (goals.calories || '\u2014') + '</td>' +
+    '<td style="padding:6px 8px;color:#888">' + (goals.sodium || '\u2014') + '</td>' +
+    '<td style="padding:6px 8px;color:#888">4,000</td>' +
+    '<td style="padding:6px 8px;color:#888">' + (goals.protein || '\u2014') + '</td>' +
+    '<td style="padding:6px 8px;color:#888">' + (goals.carbs || '\u2014') + '</td>' +
+    '<td style="padding:6px 8px;color:#888">' + (goals.sugar || '\u2014') + '</td></tr>';
+  data.forEach(function (r) {
+    const dayLabel = new Date(r.ts).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+    html += '<tr style="border-bottom:1px solid #F0F2F6;cursor:pointer" onclick="showDayDetailModal(svPatients.find(x=>x.id===\'' + p.id + '\'),{ts:' + r.ts + ',sbp:' + (r.sbp ?? 'null') + ',dbp:' + (r.dbp ?? 'null') + ',riskScore:null})">' +
+      '<td style="padding:6px 8px;font-weight:600">' + dayLabel + '</td>' +
+      '<td style="padding:6px 8px">' + (r.sbp != null ? (r.sbp + '/' + r.dbp) : '\u2014') + '</td>' +
+      '<td style="padding:6px 8px;' + cellClass(r.calories, goals.calories) + '">' + (r.calories != null ? r.calories.toLocaleString() : '\u2014') + '</td>' +
+      '<td style="padding:6px 8px;' + cellClass(r.sodium, goals.sodium) + '">' + (r.sodium != null ? r.sodium.toLocaleString() : '\u2014') + '</td>' +
+      '<td style="padding:6px 8px">' + (r.steps != null ? r.steps.toLocaleString() : '\u2014') + '</td>' +
+      '<td style="padding:6px 8px;' + cellClass(r.protein, null) + '">' + (r.protein != null ? r.protein : '\u2014') + '</td>' +
+      '<td style="padding:6px 8px;' + cellClass(r.carbs, goals.carbs) + '">' + (r.carbs != null ? r.carbs : '\u2014') + '</td>' +
+      '<td style="padding:6px 8px;' + cellClass(r.sugar, goals.sugar) + '">' + (r.sugar != null ? r.sugar : '\u2014') + '</td></tr>';
+  });
+  tableEl.innerHTML = html;
+}
+
+function renderVitalsCompare(pid) {
+  const emptyEl = document.getElementById('nt-compare-empty');
+  const bodyEl = document.getElementById('nt-compare-body');
+  const p = svPatients.find(function (x) { return x.id === pid; });
+  if (!p) { if (emptyEl) emptyEl.style.display = ''; if (bodyEl) bodyEl.style.display = 'none'; return; }
+  if (emptyEl) emptyEl.style.display = 'none';
+  if (bodyEl) bodyEl.style.display = '';
+
+  document.querySelectorAll('#nt-compare-range button').forEach(function (b) { b.classList.toggle('active', +b.dataset.days === _compareRangeDays); });
+
+  const data = buildCompareData(p, _compareRangeDays);
+  const metrics = getCompareMetrics(p, data);
+  _compareCurrentData = data;
+  _compareCurrentMetrics = metrics;
+
+  ensureCompareChart(p, metrics);
+  renderCompareLegend(null);
+  if (_compareChart) {
+    _compareSbpSeries.setData(data.filter(function (r) { return r.sbp != null; }).map(function (r) { return { time: r.dateStr, value: r.sbp }; }));
+    _compareDbpSeries.setData(data.filter(function (r) { return r.dbp != null; }).map(function (r) { return { time: r.dateStr, value: r.dbp }; }));
+    metrics.forEach(function (m) {
+      const series = _comparePaneSeries[m.key];
+      if (series) series.setData(data.filter(function (r) { return r[m.key] != null; }).map(function (r) { return { time: r.dateStr, value: r[m.key] }; }));
+    });
+    refreshCompareChartSize();
+    requestAnimationFrame(refreshCompareChartSize);
+    setTimeout(refreshCompareChartSize, 150);
+  }
+
+  const goals = nutrGetGoalsForPid(pid);
+  renderCompareTable(p, data, goals);
+}
+
 // ── SMART CARE PLAN PRE-SELECTION ──
 // Checks only the items relevant to THIS patient vitals and conditions.
 // Nurse sees pre-selected suggestions and can check/uncheck freely.
@@ -7145,6 +7373,10 @@ function svTab(el,name){
   if (name === 'nt-nutrition') {
     const pid = activePatientId || _nutrCurrentPid;
     if (pid) nutrLoadForPatient(pid);
+  }
+  if (name === 'nt-compare') {
+    const pid = activePatientId || _nutrCurrentPid;
+    if (pid) renderVitalsCompare(pid);
   }
 }
 function svInsert(txt){document.getElementById('sv-reply').value=txt}
