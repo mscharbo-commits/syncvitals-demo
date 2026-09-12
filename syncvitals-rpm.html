@@ -381,7 +381,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 </style>
 <script src="supabase-client.js"></script>
 <script src="lightweight-charts.js"></script>
-<script src="data-engine.js?v=1789176863"></script>
+<script src="data-engine.js?v=1789177298"></script>
 </head>
 <body>
 
@@ -7632,12 +7632,22 @@ function nutrStartPolling() {
   // on a timer. This is the same cross-tab mechanism the shared data engine
   // uses for prediction scores.
   window.addEventListener('storage', function(e) {
-    if (!e.key || e.key.indexOf('sv_nutr_alert_') !== 0) return;
-    nutrUpdateQueueBadges();
-    const pid = e.key.replace('sv_nutr_alert_', '');
-    const nutrTabEl = document.getElementById('nt-nutrition');
-    if ((activePatientId === pid || _nutrCurrentPid === pid) && nutrTabEl && nutrTabEl.classList.contains('active') && typeof renderNutrAdherence === 'function') {
-      try { renderNutrAdherence(pid); } catch (err) {}
+    if (!e.key) return;
+    if (e.key.indexOf('sv_nutr_alert_') === 0) {
+      nutrUpdateQueueBadges();
+      const pid = e.key.replace('sv_nutr_alert_', '');
+      const nutrTabEl = document.getElementById('nt-nutrition');
+      if ((activePatientId === pid || _nutrCurrentPid === pid) && nutrTabEl && nutrTabEl.classList.contains('active') && typeof renderNutrAdherence === 'function') {
+        try { renderNutrAdherence(pid); } catch (err) {}
+      }
+    } else if (e.key.indexOf('sv_nutr_log_') === 0 || e.key.indexOf('sv_nutr_act_') === 0) {
+      // Patient logged food/activity in another tab — refresh this tab's
+      // view of it immediately instead of only picking it up on next reload.
+      const rest = e.key.replace('sv_nutr_log_', '').replace('sv_nutr_act_', '');
+      const pid = rest.slice(0, rest.indexOf('_'));
+      if (_nutrView === 'adherence' && _nutrCurrentPid === pid && typeof renderNutrAdherence === 'function') {
+        try { renderNutrAdherence(pid); } catch (err) {}
+      }
     }
   });
   // Fallback poll in case two portals are open in tabs that predate this load
