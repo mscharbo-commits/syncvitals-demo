@@ -381,7 +381,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 </style>
 <script src="supabase-client.js"></script>
 <script src="lightweight-charts.js"></script>
-<script src="data-engine.js?v=1789192573"></script>
+<script src="data-engine.js?v=1789193277"></script>
 </head>
 <body>
 
@@ -1088,9 +1088,20 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
         <div id="nt-compare-body" style="display:none">
           <div style="font-size:14px;font-weight:700;color:var(--sv-navy);margin-bottom:2px">Vitals \u00d7 Nutrition \u00d7 Activity</div>
           <div style="font-size:12px;color:#888;margin-bottom:10px">Spot what's actually driving a change \u2014 diet and activity plotted against the same timeline as vitals.</div>
-          <div id="nt-compare-legend" style="display:flex;flex-direction:column;gap:6px;margin-bottom:10px"></div>
-          <div id="nt-compare-chart" style="width:100%"></div>
-          <div class="sv-trend-range" id="nt-compare-range">
+          <div id="nt-compare-legend" style="display:flex;flex-direction:column;gap:6px;margin-bottom:14px"></div>
+
+          <div style="font-size:11px;font-weight:700;color:#185FA5;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:4px">Vitals</div>
+          <div id="nt-compare-chart-vitals" style="width:100%"></div>
+
+          <div style="height:22px"></div>
+          <div style="font-size:11px;font-weight:700;color:#1D9E75;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:4px">Nutrition</div>
+          <div id="nt-compare-chart-nutrition" style="width:100%"></div>
+
+          <div style="height:22px"></div>
+          <div style="font-size:11px;font-weight:700;color:#00897B;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:4px">Activity</div>
+          <div id="nt-compare-chart-activity" style="width:100%"></div>
+
+          <div class="sv-trend-range" id="nt-compare-range" style="margin-top:14px">
             <button data-days="7" onclick="setCompareRange(7)">7D</button>
             <button data-days="14" onclick="setCompareRange(14)">14D</button>
             <button data-days="30" onclick="setCompareRange(30)">30D</button>
@@ -4514,30 +4525,42 @@ function renderTrendChart(p) {
 // -sourced datasets (shared vitals engine, Supabase-backed nutrition log,
 // activity log) onto one shared daily timeline.
 let _compareRangeDays = 14;
-let _compareChart = null, _compareChartKey = null, _compareSbpSeries = null, _compareDbpSeries = null, _comparePaneSeries = {};
-let _compareCurrentData = [], _compareCurrentMetrics = [];
-const COMPARE_METRIC_DEFS = [
-  { key: 'sodium', label: 'Sodium (diet)', unit: 'mg', color: '#E09B3D' },
-  { key: 'calories', label: 'Calories', unit: 'kcal', color: '#1D9E75' },
-  { key: 'dietPotassium', label: 'Potassium (diet)', unit: 'mg', color: '#E57373' },
-  { key: 'protein', label: 'Protein', unit: 'g', color: '#185FA5' },
-  { key: 'carbs', label: 'Carbs', unit: 'g', color: '#9C64A6' },
-  { key: 'sugar', label: 'Sugar', unit: 'g', color: '#D4A017' },
-  { key: 'fat', label: 'Total Fat', unit: 'g', color: '#8D6E63' },
-  { key: 'phosphorus', label: 'Phosphorus', unit: 'mg', color: '#607D8B' },
-  { key: 'steps', label: 'Steps', unit: '', color: '#26A69A' },
-  { key: 'activityMin', label: 'Activity', unit: 'min', color: '#00897B' },
-  { key: 'weight', label: 'Weight', unit: 'lbs', color: '#7C5CBF', condition: 'CHF' },
-  { key: 'bloodGlucose', label: 'Blood Glucose', unit: 'mg/dL', color: '#C25450', condition: 'DM' },
-];
+let _compareCurrentData = [], _compareCurrentMetrics = { vitals: [], nutrition: [], activity: [] };
+// Each group's chart state, kept separate since these are independent chart
+// instances (real visual gap between sections) rather than panes on one chart.
+const _compareCharts = {
+  vitals: { chart: null, key: null, sbp: null, dbp: null, panes: {} },
+  nutrition: { chart: null, key: null, panes: {} },
+  activity: { chart: null, key: null, panes: {} },
+};
+const COMPARE_METRIC_DEFS = {
+  vitals: [
+    { key: 'weight', label: 'Weight', unit: 'lbs', color: '#7C5CBF', condition: 'CHF' },
+    { key: 'bloodGlucose', label: 'Blood Glucose', unit: 'mg/dL', color: '#C25450', condition: 'DM' },
+  ],
+  nutrition: [
+    { key: 'sodium', label: 'Sodium', unit: 'mg', color: '#E09B3D' },
+    { key: 'calories', label: 'Calories', unit: 'kcal', color: '#1D9E75' },
+    { key: 'dietPotassium', label: 'Potassium', unit: 'mg', color: '#E57373' },
+    { key: 'protein', label: 'Protein', unit: 'g', color: '#185FA5' },
+    { key: 'carbs', label: 'Carbs', unit: 'g', color: '#9C64A6' },
+    { key: 'sugar', label: 'Sugar', unit: 'g', color: '#D4A017' },
+    { key: 'fat', label: 'Total Fat', unit: 'g', color: '#8D6E63' },
+    { key: 'phosphorus', label: 'Phosphorus', unit: 'mg', color: '#607D8B' },
+  ],
+  activity: [
+    { key: 'steps', label: 'Steps', unit: '', color: '#26A69A' },
+    { key: 'activityMin', label: 'Active minutes', unit: 'min', color: '#00897B' },
+  ],
+};
 
 function setCompareRange(days) {
   _compareRangeDays = days;
-  document.querySelectorAll('#nt-compare-range button').forEach(function(b){ b.classList.toggle('active', +b.dataset.days === days); });
+  document.querySelectorAll('#nt-compare-range button').forEach(function (b) { b.classList.toggle('active', +b.dataset.days === days); });
   renderVitalsCompare(_nutrCurrentPid || activePatientId);
 }
 
-// Note: nutrition's own `potassium` field is DIETARY intake (mg) — a
+// Note: nutrition's own `potassium` field is DIETARY intake (mg) -- a
 // completely different thing from the blood potassium lab value (mEq/L)
 // already shown on the main vitals chart. Named distinctly here to avoid
 // conflating the two when reading this data.
@@ -4570,24 +4593,37 @@ function buildCompareData(p, days) {
 
 function getCompareMetrics(p, data) {
   const conditions = p.conditions || [];
-  return COMPARE_METRIC_DEFS.filter(function (d) {
-    if (d.condition && conditions.indexOf(d.condition) === -1) return false;
-    return data.some(function (row) { return row[d.key] != null; });
-  });
+  function filterGroup(defs) {
+    return defs.filter(function (d) {
+      if (d.condition && conditions.indexOf(d.condition) === -1) return false;
+      return data.some(function (row) { return row[d.key] != null; });
+    });
+  }
+  return {
+    vitals: filterGroup(COMPARE_METRIC_DEFS.vitals),
+    nutrition: filterGroup(COMPARE_METRIC_DEFS.nutrition),
+    activity: filterGroup(COMPARE_METRIC_DEFS.activity),
+  };
 }
 
-function ensureCompareChart(p, metrics) {
+// Shared builder for all 3 section charts. `withMainBP` adds the BP
+// area+line as pane 0 (vitals section only) -- the other two sections have
+// no "main" series, just their own stacked metrics.
+function ensureGroupChart(groupKey, containerId, p, metrics, withMainBP) {
   if (typeof LightweightCharts === 'undefined') return;
-  const el = document.getElementById('nt-compare-chart');
+  const el = document.getElementById(containerId);
   if (!el) return;
-  const key = p.id + ':' + metrics.map(function (m) { return m.key; }).join(',');
-  if (_compareChart && _compareChartKey === key) return;
-  if (_compareChart) { try { _compareChart.remove(); } catch (e) {} _compareChart = null; }
+  const state = _compareCharts[groupKey];
+  const key = p.id + ':' + (withMainBP ? 'bp,' : '') + metrics.map(function (m) { return m.key; }).join(',');
+  if (state.chart && state.key === key) return;
+  if (state.chart) { try { state.chart.remove(); } catch (e) {} state.chart = null; }
 
-  const totalHeight = 120 + metrics.length * 70;
+  const paneCount = metrics.length + (withMainBP ? 1 : 0);
+  if (paneCount === 0) { el.innerHTML = '<div style="font-size:11px;color:#bbb;padding:8px">No data for this section yet</div>'; el.style.height = 'auto'; return; }
+  const totalHeight = 70 + paneCount * 70;
   el.style.height = totalHeight + 'px';
   el.innerHTML = '';
-  _compareChart = LightweightCharts.createChart(el, {
+  state.chart = LightweightCharts.createChart(el, {
     width: el.clientWidth || 320,
     height: totalHeight,
     layout: { background: { type: 'solid', color: 'transparent' }, textColor: '#888', fontFamily: 'inherit', fontSize: 11,
@@ -4599,32 +4635,39 @@ function ensureCompareChart(p, metrics) {
     handleScroll: false,
     handleScale: { mouseWheel: false, pinch: true, axisPressedMouseMove: false },
   });
-  _compareSbpSeries = _compareChart.addSeries(LightweightCharts.AreaSeries, {
-    lineColor: '#185FA5', topColor: 'rgba(24,95,165,0.28)', bottomColor: 'rgba(24,95,165,0.02)',
-    lineWidth: 2, priceLineVisible: false, title: 'Systolic (mmHg)'
-  }, 0);
-  _compareDbpSeries = _compareChart.addSeries(LightweightCharts.LineSeries, {
-    color: '#A8C8EC', lineWidth: 1, lineStyle: LightweightCharts.LineStyle.Dashed,
-    priceLineVisible: false, lastValueVisible: false, title: 'Diastolic (mmHg)'
-  }, 0);
-  _comparePaneSeries = {};
+  let paneIndex = 0;
+  if (withMainBP) {
+    state.sbp = state.chart.addSeries(LightweightCharts.AreaSeries, {
+      lineColor: '#185FA5', topColor: 'rgba(24,95,165,0.28)', bottomColor: 'rgba(24,95,165,0.02)',
+      lineWidth: 2, priceLineVisible: false, title: 'Systolic (mmHg)'
+    }, 0);
+    state.dbp = state.chart.addSeries(LightweightCharts.LineSeries, {
+      color: '#A8C8EC', lineWidth: 1, lineStyle: LightweightCharts.LineStyle.Dashed,
+      priceLineVisible: false, lastValueVisible: false, title: 'Diastolic (mmHg)'
+    }, 0);
+    paneIndex = 1;
+  }
+  state.panes = {};
   metrics.forEach(function (m, i) {
-    _comparePaneSeries[m.key] = _compareChart.addSeries(LightweightCharts.LineSeries, {
+    state.panes[m.key] = state.chart.addSeries(LightweightCharts.LineSeries, {
       color: m.color, lineWidth: 2, priceLineVisible: false, title: m.label + (m.unit ? ' (' + m.unit + ')' : '')
-    }, i + 1);
+    }, paneIndex + i);
   });
-  _compareChartKey = key;
-  _compareChart.subscribeCrosshairMove(onCompareCrosshairMove);
+  state.key = key;
+  state.chart.subscribeCrosshairMove(onCompareCrosshairMove);
   new ResizeObserver(function () {
-    if (_compareChart && el.clientWidth > 0) _compareChart.applyOptions({ width: el.clientWidth });
+    if (state.chart && el.clientWidth > 0) state.chart.applyOptions({ width: el.clientWidth });
   }).observe(el);
 }
 
-function refreshCompareChartSize() {
-  const el = document.getElementById('nt-compare-chart');
-  if (!_compareChart || !el || !el.clientWidth) return;
-  _compareChart.applyOptions({ width: el.clientWidth });
-  _compareChart.timeScale().fitContent();
+function refreshCompareChartSizes() {
+  ['vitals', 'nutrition', 'activity'].forEach(function (g) {
+    const state = _compareCharts[g];
+    const el = document.getElementById('nt-compare-chart-' + g);
+    if (!state.chart || !el || !el.clientWidth) return;
+    state.chart.applyOptions({ width: el.clientWidth });
+    state.chart.timeScale().fitContent();
+  });
 }
 
 function renderCompareLegend(row) {
@@ -4639,13 +4682,17 @@ function renderCompareLegend(row) {
       '<span style="font-size:17px;font-weight:700;color:#222">' + label + ': ' + value + '</span></div>';
   }
   const bpLine = line('#185FA5', 'BP', (r.sbp != null ? r.sbp : '\u2014') + '/' + (r.dbp != null ? r.dbp : '\u2014') + ' mmHg' + dateTag);
-  const metricLines = _compareChart ? _compareCurrentMetrics.map(function (m) {
+  const allMetrics = [].concat(_compareCurrentMetrics.vitals, _compareCurrentMetrics.nutrition, _compareCurrentMetrics.activity);
+  const metricLines = allMetrics.map(function (m) {
     const val = r[m.key];
-    return line(m.color, m.label, (val != null ? val : '\u2014') + (m.unit ? (' ' + m.unit) : '') + (row ? dateTag : ''));
-  }) : [];
+    return line(m.color, m.label, (val != null ? val.toLocaleString() : '\u2014') + (m.unit ? (' ' + m.unit) : '') + (row ? dateTag : ''));
+  });
   legendEl.innerHTML = [bpLine].concat(metricLines).join('');
 }
 
+// Any of the 3 charts firing this updates the SAME shared legend, keyed by
+// date -- this is what keeps the three visually-separate sections feeling
+// like one integrated timeline rather than three unrelated charts.
 function onCompareCrosshairMove(param) {
   if (!param || !param.time) { renderCompareLegend(null); return; }
   const row = _compareCurrentData.find(function (r) { return r.dateStr === param.time; });
@@ -4707,19 +4754,26 @@ function renderVitalsCompare(pid) {
   _compareCurrentData = data;
   _compareCurrentMetrics = metrics;
 
-  ensureCompareChart(p, metrics);
+  ensureGroupChart('vitals', 'nt-compare-chart-vitals', p, metrics.vitals, true);
+  ensureGroupChart('nutrition', 'nt-compare-chart-nutrition', p, metrics.nutrition, false);
+  ensureGroupChart('activity', 'nt-compare-chart-activity', p, metrics.activity, false);
   renderCompareLegend(null);
-  if (_compareChart) {
-    _compareSbpSeries.setData(data.filter(function (r) { return r.sbp != null; }).map(function (r) { return { time: r.dateStr, value: r.sbp }; }));
-    _compareDbpSeries.setData(data.filter(function (r) { return r.dbp != null; }).map(function (r) { return { time: r.dateStr, value: r.dbp }; }));
-    metrics.forEach(function (m) {
-      const series = _comparePaneSeries[m.key];
+
+  ['vitals', 'nutrition', 'activity'].forEach(function (g) {
+    const state = _compareCharts[g];
+    if (!state.chart) return;
+    if (g === 'vitals') {
+      state.sbp.setData(data.filter(function (r) { return r.sbp != null; }).map(function (r) { return { time: r.dateStr, value: r.sbp }; }));
+      state.dbp.setData(data.filter(function (r) { return r.dbp != null; }).map(function (r) { return { time: r.dateStr, value: r.dbp }; }));
+    }
+    metrics[g].forEach(function (m) {
+      const series = state.panes[m.key];
       if (series) series.setData(data.filter(function (r) { return r[m.key] != null; }).map(function (r) { return { time: r.dateStr, value: r[m.key] }; }));
     });
-    refreshCompareChartSize();
-    requestAnimationFrame(refreshCompareChartSize);
-    setTimeout(refreshCompareChartSize, 150);
-  }
+  });
+  refreshCompareChartSizes();
+  requestAnimationFrame(refreshCompareChartSizes);
+  setTimeout(refreshCompareChartSizes, 150);
 
   const goals = nutrGetGoalsForPid(pid);
   renderCompareTable(p, data, goals);
