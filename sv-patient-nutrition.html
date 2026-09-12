@@ -253,7 +253,7 @@
   .tab-btn.active { background: var(--card); color: var(--navy); box-shadow: 0 1px 4px rgba(0,0,0,0.08); }
 </style>
 <script src="supabase-client.js"></script>
-<script src="data-engine.js?v=1789178150"></script>
+<script src="data-engine.js?v=1789178510"></script>
 </head>
 <body>
 
@@ -722,16 +722,18 @@ function svGetClient() {
 
 async function svPushNutritionLog(pid, date) {
   const sb = svGetClient();
-  if (!sb) return;
+  if (!sb) { console.warn('[SyncVitals] push skipped — Supabase client unavailable (library failed to load?)'); return; }
   const log = getLog(pid, date);
   const acts = getActs(pid, date);
   try {
-    await sb.from('nutrition_logs').upsert({
+    const { data, error } = await sb.from('nutrition_logs').upsert({
       patient_id: pid, log_date: date,
       breakfast: log.breakfast, lunch: log.lunch, dinner: log.dinner, snacks: log.snacks,
       activities: acts, updated_at: new Date().toISOString()
     }, { onConflict: 'patient_id,log_date' });
-  } catch (e) { console.warn('[SyncVitals] nutrition push failed, kept locally only:', e); }
+    if (error) console.error('[SyncVitals] PUSH FAILED for', pid, date, '—', error.message || error);
+    else console.log('[SyncVitals] pushed', pid, date, 'to Supabase OK');
+  } catch (e) { console.error('[SyncVitals] push threw an exception for', pid, date, ':', e); }
 }
 
 // Pulls everything the backend has for this patient into localStorage —
@@ -739,18 +741,19 @@ async function svPushNutritionLog(pid, date) {
 // their real history instead of whatever happens to be on this device.
 async function svPullNutritionForPatient(pid) {
   const sb = svGetClient();
-  if (!sb) return;
+  if (!sb) { console.warn('[SyncVitals] pull skipped — Supabase client unavailable (library failed to load?)'); return; }
   try {
     const { data, error } = await sb.from('nutrition_logs').select('*').eq('patient_id', pid);
-    if (error || !data) return;
-    data.forEach(function (row) {
+    if (error) { console.error('[SyncVitals] PULL FAILED for', pid, '—', error.message || error); return; }
+    console.log('[SyncVitals] pulled', (data||[]).length, 'rows for', pid, 'from Supabase');
+    (data||[]).forEach(function (row) {
       const dateStr = row.log_date;
       localStorage.setItem(dateKey(pid, dateStr), JSON.stringify({
         breakfast: row.breakfast || [], lunch: row.lunch || [], dinner: row.dinner || [], snacks: row.snacks || []
       }));
       localStorage.setItem(actKey(pid, dateStr), JSON.stringify(row.activities || []));
     });
-  } catch (e) { console.warn('[SyncVitals] nutrition pull failed, using local data only:', e); }
+  } catch (e) { console.error('[SyncVitals] pull threw an exception for', pid, ':', e); }
 }
 function getNutrPlan(pid) {
   try { return JSON.parse(localStorage.getItem(nutrKey(pid)) || 'null'); } catch(e) { return null; }
@@ -864,6 +867,7 @@ function launchApp(pid) {
   document.getElementById('s-login').classList.remove('active');
   document.getElementById('s-app').classList.add('active');
   renderDiary();
+  console.log('[SyncVitals] Supabase library loaded:', typeof supabase !== 'undefined');
   svPullNutritionForPatient(pid).then(function () {
     if (currentPid === pid) renderDiary(); // refresh once real backend data has arrived
   });

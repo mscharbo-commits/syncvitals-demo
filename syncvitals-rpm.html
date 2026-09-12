@@ -381,7 +381,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 </style>
 <script src="supabase-client.js"></script>
 <script src="lightweight-charts.js"></script>
-<script src="data-engine.js?v=1789178150"></script>
+<script src="data-engine.js?v=1789178510"></script>
 </head>
 <body>
 
@@ -3208,6 +3208,7 @@ function nutrSeedHistoryIfEmptyRPM(p, days) {
 }
 
 document.addEventListener('DOMContentLoaded', function () {
+  console.log('[SyncVitals] Supabase library loaded:', typeof supabase !== 'undefined');
   svPullAllNutritionFromSupabase().then(function () {
     svPatients.forEach(function (p) { nutrSeedHistoryIfEmptyRPM(p, 21); }); // only fills genuine gaps — real data pulled above is never overwritten
     return svMigrateLocalNutritionToSupabase(); // one-time: push everything now in localStorage (seeded + real) up to the real database
@@ -3240,12 +3241,13 @@ function svApplyNutritionRow(row) {
 
 async function svPullAllNutritionFromSupabase() {
   const sb = svGetClient();
-  if (!sb) return;
+  if (!sb) { console.warn('[SyncVitals] pull skipped — Supabase client unavailable (library failed to load?)'); return; }
   try {
     const { data, error } = await sb.from('nutrition_logs').select('*');
-    if (error || !data) return;
-    data.forEach(svApplyNutritionRow);
-  } catch (e) { console.warn('[SyncVitals] nutrition pull failed, using local/seeded data only:', e); }
+    if (error) { console.error('[SyncVitals] PULL FAILED —', error.message || error); return; }
+    console.log('[SyncVitals] pulled', (data||[]).length, 'total rows from Supabase');
+    (data||[]).forEach(svApplyNutritionRow);
+  } catch (e) { console.error('[SyncVitals] pull threw an exception:', e); }
 }
 
 // One-time migration: everything already sitting in localStorage (including
@@ -3256,7 +3258,8 @@ async function svPullAllNutritionFromSupabase() {
 const SV_MIGRATION_FLAG = 'sv_nutr_migrated_v1';
 async function svMigrateLocalNutritionToSupabase() {
   const sb = svGetClient();
-  if (!sb || localStorage.getItem(SV_MIGRATION_FLAG)) return;
+  if (!sb) { console.warn('[SyncVitals] migration skipped — Supabase client unavailable (library failed to load?)'); return; }
+  if (localStorage.getItem(SV_MIGRATION_FLAG)) { console.log('[SyncVitals] migration already completed previously (flag set) — skipping. Run localStorage.removeItem("' + SV_MIGRATION_FLAG + '") in console to force a re-run.'); return; }
   const rows = {}; // keyed by "pid_date" so a log + its activities merge into one row
   for (let i = 0; i < localStorage.length; i++) {
     const key = localStorage.key(i);
@@ -3279,27 +3282,29 @@ async function svMigrateLocalNutritionToSupabase() {
     }
   }
   const upserts = Object.values(rows);
+  console.log('[SyncVitals] migration found', upserts.length, 'local day-records to push');
   if (!upserts.length) { localStorage.setItem(SV_MIGRATION_FLAG, '1'); return; }
   try {
-    const { error } = await sb.from('nutrition_logs').upsert(upserts, { onConflict: 'patient_id,log_date' });
-    if (!error) { localStorage.setItem(SV_MIGRATION_FLAG, '1'); console.log('[SyncVitals] migrated', upserts.length, 'existing nutrition days to Supabase'); }
-    else console.warn('[SyncVitals] migration upsert error:', error);
-  } catch (e) { console.warn('[SyncVitals] migration failed, will retry next load:', e); }
+    const { data, error } = await sb.from('nutrition_logs').upsert(upserts, { onConflict: 'patient_id,log_date' });
+    if (!error) { localStorage.setItem(SV_MIGRATION_FLAG, '1'); console.log('[SyncVitals] MIGRATION SUCCESS —', upserts.length, 'days pushed to Supabase'); }
+    else console.error('[SyncVitals] MIGRATION FAILED —', error.message || error, error);
+  } catch (e) { console.error('[SyncVitals] migration threw an exception:', e); }
 }
 
 // Live push: the moment a patient logs food on any device, this fires and
 // the nurse's screen updates without a refresh or polling delay.
 function svSubscribeNutritionRealtime() {
   const sb = svGetClient();
-  if (!sb) return;
+  if (!sb) { console.warn('[SyncVitals] realtime subscription skipped — Supabase client unavailable'); return; }
   sb.channel('nutrition-logs-changes')
     .on('postgres_changes', { event: '*', schema: 'public', table: 'nutrition_logs' }, function (payload) {
+      console.log('[SyncVitals] realtime update received:', payload.new);
       if (!payload.new || !payload.new.patient_id) return;
       svApplyNutritionRow(payload.new);
       if (_nutrView === 'adherence' && _nutrCurrentPid === payload.new.patient_id) renderNutrAdherence(_nutrCurrentPid);
       nutrUpdateQueueBadges();
     })
-    .subscribe();
+    .subscribe(function (status) { console.log('[SyncVitals] realtime subscription status:', status); });
 }
 
 // ── SHARED ENGINE SYNC ──
