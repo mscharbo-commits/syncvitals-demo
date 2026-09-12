@@ -381,7 +381,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 </style>
 <script src="supabase-client.js"></script>
 <script src="lightweight-charts.js"></script>
-<script src="data-engine.js?v=1789178510"></script>
+<script src="data-engine.js?v=1789178832"></script>
 </head>
 <body>
 
@@ -3281,7 +3281,16 @@ async function svMigrateLocalNutritionToSupabase() {
       rows[rowKey] = Object.assign({ patient_id: pid, log_date: dateStr }, rows[rowKey], { activities: acts });
     }
   }
-  const upserts = Object.values(rows);
+  const upserts = Object.values(rows).map(function (r) {
+    // PostgREST bulk upsert sends explicit NULL for any column missing from
+    // a given row (rather than letting the DB apply its column default) when
+    // rows in the same batch have inconsistent shapes — some days only had
+    // a food log and no activity entry, so 'activities' was never set on
+    // those rows, which the not-null constraint then rejected.
+    return Object.assign({
+      breakfast: [], lunch: [], dinner: [], snacks: [], activities: []
+    }, r);
+  });
   console.log('[SyncVitals] migration found', upserts.length, 'local day-records to push');
   if (!upserts.length) { localStorage.setItem(SV_MIGRATION_FLAG, '1'); return; }
   try {
