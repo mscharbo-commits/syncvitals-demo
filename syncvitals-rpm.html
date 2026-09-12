@@ -381,7 +381,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 </style>
 <script src="supabase-client.js"></script>
 <script src="lightweight-charts.js"></script>
-<script src="data-engine.js?v=1789255000"></script>
+<script src="data-engine.js?v=1789255397"></script>
 </head>
 <body>
 
@@ -445,10 +445,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
       </div>
     </div>
     <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px">
-      <div class="sv-stat"><div class="sv-stat-label">Active patients</div><div class="sv-stat-val">247</div></div>
-      <div class="sv-stat"><div class="sv-stat-label">Open alerts today</div><div class="sv-stat-val" style="color:var(--sv-navy-mid)">3</div></div>
-      <div class="sv-stat"><div class="sv-stat-label">Care paths generated</div><div class="sv-stat-val">1,482</div></div>
-      <div class="sv-stat"><div class="sv-stat-label">Conditions covered</div><div class="sv-stat-val">5</div></div>
+      <div class="sv-stat"><div class="sv-stat-label">Active patients</div><div class="sv-stat-val" id="home-stat-patients">—</div></div>
+      <div class="sv-stat"><div class="sv-stat-label">Open alerts today</div><div class="sv-stat-val" id="home-stat-alerts" style="color:var(--sv-navy-mid)">—</div></div>
+      <div class="sv-stat"><div class="sv-stat-label">Care paths generated</div><div class="sv-stat-val" id="home-stat-careplans">—</div></div>
+      <div class="sv-stat"><div class="sv-stat-label">Conditions covered</div><div class="sv-stat-val" id="home-stat-conditions">—</div></div>
     </div>
     <div style="margin-top:24px;padding:16px;background:#fff;border-radius:10px;border:0.5px solid var(--sv-border)">
       <div style="font-size:11px;font-weight:600;color:var(--sv-navy-mid);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:10px">About this demo</div>
@@ -3807,7 +3807,7 @@ function renderRegistry(filter) {
     const badgeClass = al === 'crisis' ? 'sv-badge-crisis' : al === 'stage2' ? 'sv-badge-stage2' : al === 'stage1' ? 'sv-badge-stage1' : 'sv-badge-live';
     const badgeLabel = al === 'crisis' ? 'Crisis' : al === 'stage2' ? 'Stage 2' : al === 'stage1' ? 'Watch' : 'Stable';
     const bpColor = al === 'crisis' ? '#A32D2D' : al === 'stage2' ? '#633806' : al === 'stage1' ? 'var(--sv-navy-mid)' : '#27500A';
-    const riskPct = al === 'crisis' ? 95 : al === 'stage2' ? 68 : al === 'stage1' ? 42 : 18;
+    const riskPct = p.riskScore != null ? p.riskScore : (al === 'crisis' ? 95 : al === 'stage2' ? 68 : al === 'stage1' ? 42 : 18);
     const riskColor = al === 'crisis' ? '#E24B4A' : al === 'stage2' ? '#EF9F27' : al === 'stage1' ? '#5B9BD5' : '#1D9E75';
     const condStr = p.conditions.join(', ');
     const mainVal = v.sbp ? v.sbp + '/' + v.dbp : '—';
@@ -5297,10 +5297,34 @@ function addNewPatient() {
 }
 
 // ── INIT REGISTRY ON LOAD ──
+// ── HOME SCREEN STATS — real counts from the actual patient roster, ──
+// replacing hardcoded marketing placeholder numbers (247 patients, 1,482
+// care paths, etc.) that had nothing to do with this demo's real 12-patient
+// data set.
+function updateHomeStats() {
+  const patientsEl = document.getElementById('home-stat-patients');
+  const alertsEl = document.getElementById('home-stat-alerts');
+  const careplansEl = document.getElementById('home-stat-careplans');
+  const conditionsEl = document.getElementById('home-stat-conditions');
+  if (patientsEl) patientsEl.textContent = svPatients.length;
+  if (alertsEl) {
+    const alertCount = svPatients.filter(function (p) { return p.alertLevel === 'crisis' || p.alertLevel === 'stage2'; }).length;
+    alertsEl.textContent = alertCount;
+  }
+  // Every enrolled patient has a generated 30/60/90 care path in this demo
+  if (careplansEl) careplansEl.textContent = svPatients.length;
+  if (conditionsEl) {
+    const uniqueConditions = new Set();
+    svPatients.forEach(function (p) { (p.conditions || []).forEach(function (c) { uniqueConditions.add(c); }); });
+    conditionsEl.textContent = uniqueConditions.size;
+  }
+}
+
 document.addEventListener('DOMContentLoaded', () => {
   svPatients.forEach(p => { p.alertLevel = calcAlertLevel(p); });
   renderRegistry();
   renderProtocolList();
+  updateHomeStats();
   // Set Margaret as default active patient for nurse path initial state
   activePatientId = 'P001';
   renderPatientContext(svPatients[0]);
