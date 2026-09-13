@@ -381,7 +381,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 </style>
 <script src="supabase-client.js"></script>
 <script src="lightweight-charts.js"></script>
-<script src="data-engine.js?v=1789314597"></script>
+<script src="data-engine.js?v=1789314833"></script>
 </head>
 <body>
 
@@ -542,6 +542,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
       <div class="sv-tab" onclick="svTab(this,'nt-ai')">🏥 Admissions</div>
       <div class="sv-tab" onclick="svTab(this,'nt-nutrition')">🥗 Nutrition <span id="nutr-tab-badge" style="display:none;background:#E24B4A;color:#fff;font-size:9px;font-weight:700;padding:1px 5px;border-radius:10px;margin-left:3px;vertical-align:middle"></span></div>
       <div class="sv-tab" onclick="svTab(this,'nt-compare')">📊 Vitals Compare</div>
+      <div class="sv-tab" onclick="svTab(this,'nt-appts')">📅 Appointments</div>
       <div class="sv-tab" onclick="svTab(this,'nt-doc')">Document</div>
     </div>
 
@@ -1106,6 +1107,17 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
         </div>
       </div>
     </div>
+<div id="nt-appts" class="sv-tc">
+  <div id="nt-appts-content" style="padding:12px">
+    <div style="font-size:12px;color:#aaa;padding:20px;text-align:center" id="nt-appts-empty">Select a patient to view their appointment schedule</div>
+    <div id="nt-appts-body" style="display:none">
+      <div style="font-size:14px;font-weight:700;color:var(--sv-navy);margin-bottom:2px">Appointment Schedule</div>
+      <div id="nt-appts-status" style="font-size:12px;color:#888;margin-bottom:14px"></div>
+      <div id="nt-appts-list"></div>
+    </div>
+  </div>
+</div>
+
 </div>
   
 </div>
@@ -5033,6 +5045,63 @@ function renderVitalsCompare(pid) {
   setTimeout(refreshCompareChartSizes, 150);
 }
 
+// ── APPOINTMENTS TAB ──
+// Shows the full appointment schedule for whichever patient has one on
+// file, with past/upcoming clearly separated and gaps between visits
+// flagged — so a nurse can spot "this patient has 23 days with nothing
+// scheduled" and decide whether something should be added in between.
+const APPT_GAP_WARNING_DAYS = 21; // gaps longer than this get flagged
+function renderAppointments(pid) {
+  const emptyEl = document.getElementById('nt-appts-empty');
+  const bodyEl = document.getElementById('nt-appts-body');
+  const p = svPatients.find(function (x) { return x.id === pid; });
+  if (!p) { if (emptyEl) emptyEl.style.display = ''; if (bodyEl) bodyEl.style.display = 'none'; return; }
+
+  if (!Array.isArray(p.appointments) || !p.enrollmentDate || !p.appointments.length) {
+    if (emptyEl) { emptyEl.style.display = ''; emptyEl.textContent = 'No appointment schedule on file for ' + p.name + '.'; }
+    if (bodyEl) bodyEl.style.display = 'none';
+    return;
+  }
+  if (emptyEl) emptyEl.style.display = 'none';
+  if (bodyEl) bodyEl.style.display = '';
+
+  const daysSinceEnrollment = Math.floor((Date.now() - p.enrollmentDate) / 86400000);
+  const sorted = p.appointments.slice().sort(function (a, b) { return a.day - b.day; });
+  const nextAppt = sorted.find(function (a) { return a.day >= daysSinceEnrollment; });
+
+  const statusEl = document.getElementById('nt-appts-status');
+  if (statusEl) {
+    statusEl.innerHTML = 'Day ' + daysSinceEnrollment + ' of care plan' +
+      (nextAppt ? ' &middot; Next: <strong style="color:var(--sv-navy)">' + nextAppt.who + '</strong> in ' + (nextAppt.day - daysSinceEnrollment) + ' day(s)' : ' &middot; No further appointments scheduled');
+  }
+
+  // Detect gaps between consecutive appointments (including from today to
+  // the next one) so a long stretch with nothing scheduled is obvious.
+  const gapsBefore = {}; // keyed by index in `sorted`
+  let prevDay = 0; // enrollment day
+  sorted.forEach(function (a, i) {
+    const gap = a.day - prevDay;
+    if (gap >= APPT_GAP_WARNING_DAYS) gapsBefore[i] = gap;
+    prevDay = a.day;
+  });
+
+  const rows = sorted.map(function (a, i) {
+    const isPast = a.day < daysSinceEnrollment;
+    const isNext = a === nextAppt;
+    const daysLabel = isPast ? (daysSinceEnrollment - a.day) + ' day(s) ago' : 'in ' + (a.day - daysSinceEnrollment) + ' day(s)';
+    const gapWarning = gapsBefore[i] ? '<div style="background:#FCEBEB;border-left:3px solid #E24B4A;padding:6px 10px;margin:6px 0;font-size:11px;color:#A32D2D;border-radius:0 6px 6px 0">⚠ ' + gapsBefore[i] + '-day gap before this visit — consider a check-in if anything changes</div>' : '';
+    return gapWarning + '<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 12px;border-radius:8px;margin-bottom:6px;' +
+      (isNext ? 'background:#EAF3FF;border:1px solid #185FA5' : isPast ? 'background:#fafafa;opacity:0.6' : 'background:#fff;border:1px solid #eee') + '">' +
+      '<div><div style="font-size:13px;font-weight:700;color:' + (isPast ? '#888' : 'var(--sv-navy)') + '">Day ' + a.day + (isPast ? ' ✓' : '') + ' — ' + a.who + '</div>' +
+      '<div style="font-size:12px;color:#888;margin-top:2px">' + a.purpose + '</div></div>' +
+      '<div style="font-size:11px;font-weight:700;color:' + (isNext ? '#185FA5' : isPast ? '#bbb' : '#888') + ';white-space:nowrap;margin-left:10px">' + daysLabel + '</div>' +
+      '</div>';
+  }).join('');
+
+  const listEl = document.getElementById('nt-appts-list');
+  if (listEl) listEl.innerHTML = rows;
+}
+
 // ── SMART CARE PLAN PRE-SELECTION ──
 // Checks only the items relevant to THIS patient vitals and conditions.
 // Nurse sees pre-selected suggestions and can check/uncheck freely.
@@ -7735,6 +7804,10 @@ function svTab(el,name){
   if (name === 'nt-compare') {
     const pid = activePatientId || _nutrCurrentPid;
     if (pid) renderVitalsCompare(pid);
+  }
+  if (name === 'nt-appts') {
+    const pid = activePatientId || _nutrCurrentPid;
+    if (pid) renderAppointments(pid);
   }
 }
 function svInsert(txt){document.getElementById('sv-reply').value=txt}
