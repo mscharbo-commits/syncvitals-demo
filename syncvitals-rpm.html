@@ -381,7 +381,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 </style>
 <script src="supabase-client.js"></script>
 <script src="lightweight-charts.js"></script>
-<script src="data-engine.js?v=1789313366"></script>
+<script src="data-engine.js?v=1789314298"></script>
 </head>
 <body>
 
@@ -2943,6 +2943,24 @@ function buildAiAssistContext(pid) {
     p.interventionNote ? ('Recent intervention on file: ' + p.interventionNote) : '',
   ].filter(Boolean);
 
+  // Appointment schedule, if this patient has a structured one on file —
+  // computed from enrollment date + day offsets, not just static text, so
+  // "next appointment" reflects where the patient actually is in their plan.
+  if (Array.isArray(p.appointments) && p.enrollmentDate) {
+    const daysSinceEnrollment = Math.floor((Date.now() - p.enrollmentDate) / 86400000);
+    const upcoming = p.appointments
+      .filter(function (a) { return a.day >= daysSinceEnrollment; })
+      .sort(function (a, b) { return a.day - b.day; });
+    if (upcoming.length) {
+      lines.push('Days since enrollment in care plan: ' + daysSinceEnrollment);
+      lines.push('Upcoming appointments: ' + upcoming.slice(0, 4).map(function (a) {
+        return 'Day ' + a.day + ' (in ' + (a.day - daysSinceEnrollment) + ' days) — ' + a.who + ': ' + a.purpose;
+      }).join(' | '));
+    } else {
+      lines.push('No further appointments scheduled in the current care plan (Day ' + daysSinceEnrollment + ' of plan).');
+    }
+  }
+
   // 14-day trend so the assistant can answer "why did X change" without guessing
   const trendSummary = data.map(function (r) {
     return r.dateStr + ': BP ' + (r.sbp != null ? r.sbp + '/' + r.dbp : '—') + (r.sodium != null ? ', Na ' + r.sodium + 'mg' : '');
@@ -3113,6 +3131,24 @@ let svPatients = [
     hasDiabetes: false, hasCHF: false,
     lastVitals: { sbp: 172, dbp: 98, hr: 88, spo2: 97, weight: 162, temp: 98.4, glucose: null, hba1c: null, sodium: 2400 },
     baselineWeight: 160, symptoms: [], adherence: 'partial', alertLevel: 'stage2', carePlanPhase: 30,
+    // Enrollment date + structured appointment schedule, matching her actual
+    // generated 30/60/90 care plan (physician: Dr. James Osei). Stored as a
+    // real data structure — not just display text — so anything on the
+    // platform (including the AI assistant) can look up "next appointment."
+    enrollmentDate: Date.now() - 86400000 * 28,
+    physician: 'Dr. James Osei',
+    appointments: [
+      { day: 2,  who: 'Nurse R. Santos', purpose: 'Medication confirmation + BP recheck' },
+      { day: 7,  who: 'Nurse R. Santos', purpose: 'Weekly check-in — BP log, diet diary' },
+      { day: 14, who: 'Nurse R. Santos', purpose: 'Weekly check-in — BP log, diet diary' },
+      { day: 14, who: 'Dr. James Osei', purpose: 'Lisinopril dose review, GFR labs' },
+      { day: 21, who: 'Nurse R. Santos', purpose: 'Weekly check-in — BP log, diet diary' },
+      { day: 35, who: 'Dietitian', purpose: 'Personalized DASH meal plan' },
+      { day: 45, who: 'Dr. James Osei', purpose: 'Labs review: GFR, BMP, K+' },
+      { day: 75, who: 'Dr. James Osei', purpose: 'RPM frequency reassessment' },
+      { day: 80, who: 'Lab', purpose: 'GFR, BMP, potassium, lipid panel' },
+      { day: 90, who: 'Full care team', purpose: 'Goals review + step-down eligibility' },
+    ],
     vitalHistory: [
       { ts: Date.now() - 86400000*3, sbp:168, dbp:96 },
       { ts: Date.now() - 86400000*2, sbp:170, dbp:97 },
