@@ -381,7 +381,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 </style>
 <script src="supabase-client.js"></script>
 <script src="lightweight-charts.js"></script>
-<script src="data-engine.js?v=1789312165"></script>
+<script src="data-engine.js?v=1789312750"></script>
 </head>
 <body>
 
@@ -2951,15 +2951,19 @@ function renderAiAssistMessages() {
   el.scrollTop = el.scrollHeight;
 }
 
+let _aiAssistSending = false;
 async function aiAssistSend() {
+  if (_aiAssistSending) { console.warn('[AIAssist] already sending, ignoring duplicate send'); return; }
   const input = document.getElementById('ai-assist-input');
   const q = input ? input.value.trim() : '';
   if (!q) return;
   if (input) input.value = '';
+  _aiAssistSending = true;
 
   const pid = activePatientId || _nutrCurrentPid || null;
   _aiAssistHistory.push({ role: 'user', content: q });
   renderAiAssistMessages();
+  console.log('[AIAssist] sending, history length now', _aiAssistHistory.length, 'pid:', pid);
 
   const el = document.getElementById('ai-assist-messages');
   const loadingDiv = document.createElement('div');
@@ -2985,20 +2989,25 @@ async function aiAssistSend() {
         maxTokens: 500
       })
     });
+    console.log('[AIAssist] response status:', resp.status);
     const data = await resp.json();
+    console.log('[AIAssist] response body:', JSON.stringify(data).slice(0, 500));
     const loadEl = document.getElementById('ai-assist-loading');
     if (loadEl) loadEl.remove();
     if (!resp.ok) {
+      console.error('[AIAssist] API error:', data.error);
       _aiAssistHistory.push({ role: 'assistant', content: 'Sorry, I ran into an error: ' + (data.error || 'unknown error') + '. Please try again.' });
     } else {
       const text = data.content && data.content[0] ? data.content[0].text : 'No response.';
       _aiAssistHistory.push({ role: 'assistant', content: text });
     }
   } catch (e) {
+    console.error('[AIAssist] exception:', e);
     const loadEl = document.getElementById('ai-assist-loading');
     if (loadEl) loadEl.remove();
     _aiAssistHistory.push({ role: 'assistant', content: 'Sorry, I couldn\'t reach the assistant right now. Please try again.' });
   }
+  _aiAssistSending = false;
   renderAiAssistMessages();
 }
 
@@ -8892,8 +8901,8 @@ function nutrClear() {
   </div>
   <div id="ai-assist-messages" style="flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:12px"></div>
   <div style="padding:10px;display:flex;flex-wrap:wrap;gap:6px;border-top:1px solid #f0f0f0">
-    <button onclick="aiAssistQuickAsk('Summarize this patient\\'s last 2 weeks')" style="font-size:11px;padding:5px 10px;border-radius:14px;border:1px solid #ddd;background:#fafafa;color:#555;cursor:pointer">Summarize last 2 weeks</button>
-    <button onclick="aiAssistQuickAsk('Why did this patient\\'s risk score change recently?')" style="font-size:11px;padding:5px 10px;border-radius:14px;border:1px solid #ddd;background:#fafafa;color:#555;cursor:pointer">Why did risk change?</button>
+    <button onclick="aiAssistQuickAsk('Summarize this patient&#39;s last 2 weeks')" style="font-size:11px;padding:5px 10px;border-radius:14px;border:1px solid #ddd;background:#fafafa;color:#555;cursor:pointer">Summarize last 2 weeks</button>
+    <button onclick="aiAssistQuickAsk('Why did this patient&#39;s risk score change recently?')" style="font-size:11px;padding:5px 10px;border-radius:14px;border:1px solid #ddd;background:#fafafa;color:#555;cursor:pointer">Why did risk change?</button>
     <button onclick="aiAssistQuickAsk('Draft a physician escalation message for this patient')" style="font-size:11px;padding:5px 10px;border-radius:14px;border:1px solid #ddd;background:#fafafa;color:#555;cursor:pointer">Draft escalation message</button>
   </div>
   <div style="padding:12px;border-top:1px solid #eee;display:flex;gap:8px;flex-shrink:0">
