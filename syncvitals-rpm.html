@@ -381,7 +381,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 </style>
 <script src="supabase-client.js"></script>
 <script src="lightweight-charts.js"></script>
-<script src="data-engine.js?v=1789313247"></script>
+<script src="data-engine.js?v=1789313366"></script>
 </head>
 <body>
 
@@ -2880,7 +2880,14 @@ let _aiAssistOpen = false;
 let _aiAssistHistory = []; // [{role, content}] — sent back to the API each turn for conversation continuity
 let _aiAssistCurrentPid = null;
 
+const AI_DISCLAIMER_FLAG = 'sv_ai_disclaimer_accepted';
 function toggleAiAssist() {
+  // First-ever open in this browser: show the consent disclaimer instead of the panel directly.
+  if (!_aiAssistOpen && !localStorage.getItem(AI_DISCLAIMER_FLAG)) {
+    const modal = document.getElementById('ai-assist-disclaimer-modal');
+    if (modal) modal.style.display = 'flex';
+    return;
+  }
   _aiAssistOpen = !_aiAssistOpen;
   const panel = document.getElementById('ai-assist-panel');
   if (panel) panel.style.right = _aiAssistOpen ? '0' : '-420px';
@@ -2896,6 +2903,13 @@ function toggleAiAssist() {
     const p = pid ? svPatients.find(function (x) { return x.id === pid; }) : null;
     labelEl.textContent = p ? ('Viewing ' + p.name) : 'No patient open';
   }
+}
+
+function acceptAiAssistDisclaimer() {
+  localStorage.setItem(AI_DISCLAIMER_FLAG, '1');
+  const modal = document.getElementById('ai-assist-disclaimer-modal');
+  if (modal) modal.style.display = 'none';
+  toggleAiAssist(); // now actually open the panel
 }
 
 function aiAssistQuickAsk(q) {
@@ -8920,6 +8934,15 @@ function nutrClear() {
     <button onclick="aiAssistSend()" style="background:var(--sv-navy);color:#fff;border:none;border-radius:10px;padding:10px 16px;font-size:13px;font-weight:700;cursor:pointer">Send</button>
   </div>
   <div style="font-size:9px;color:#bbb;text-align:center;padding:6px;flex-shrink:0">Decision support only — clinical decisions remain with the treating clinician.</div>
+</div>
+
+<div id="ai-assist-disclaimer-modal" style="display:none;position:fixed;inset:0;background:rgba(13,46,110,0.4);z-index:9002;align-items:center;justify-content:center;padding:20px">
+  <div style="background:#fff;border-radius:14px;max-width:360px;padding:22px;text-align:center">
+    <div style="font-size:28px;margin-bottom:10px">✨</div>
+    <div style="font-size:15px;font-weight:700;color:var(--sv-navy);margin-bottom:10px">Before you start</div>
+    <div style="font-size:13px;color:#555;line-height:1.6;margin-bottom:18px">This AI assistant provides decision support only, based on the patient data shown. It does not diagnose or prescribe treatment. All clinical decisions remain with the treating clinician.</div>
+    <button onclick="acceptAiAssistDisclaimer()" style="width:100%;padding:11px;background:var(--sv-navy);color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer">I Understand</button>
+  </div>
 </div>
 
 </body>
