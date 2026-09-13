@@ -381,7 +381,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 </style>
 <script src="supabase-client.js"></script>
 <script src="lightweight-charts.js"></script>
-<script src="data-engine.js?v=1789315622"></script>
+<script src="data-engine.js?v=1789316929"></script>
 </head>
 <body>
 
@@ -2248,6 +2248,10 @@ function downloadPdf() {
   // ── COLLECT items grouped by phase → category ──
   // byCategory[phase][categoryName] = [ {text, patientText}, ... ]
   const byCategory = { 30: {}, 60: {}, 90: {} };
+
+  const allCpItems = document.querySelectorAll('#nt-9090 .cp-item');
+  const checkedCount = Array.from(allCpItems).filter(function(i){ const c = i.querySelector('.action-check'); return c && c.classList.contains('chk'); }).length;
+  console.log('[PDF Export] Found', allCpItems.length, 'total .cp-item elements,', checkedCount, 'marked checked');
 
   document.querySelectorAll('#nt-9090 .cp-item').forEach(item => {
     const chk = item.querySelector('.action-check');
