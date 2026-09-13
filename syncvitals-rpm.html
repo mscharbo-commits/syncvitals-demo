@@ -381,7 +381,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 </style>
 <script src="supabase-client.js"></script>
 <script src="lightweight-charts.js"></script>
-<script src="data-engine.js?v=1789258863"></script>
+<script src="data-engine.js?v=1789267530"></script>
 </head>
 <body>
 
@@ -3339,7 +3339,7 @@ function svSubscribeNutritionRealtime() {
   if (!sb) { console.warn('[SyncVitals] realtime subscription skipped — Supabase client unavailable'); return; }
   sb.channel('nutrition-logs-changes')
     .on('postgres_changes', { event: '*', schema: 'public', table: 'nutrition_logs' }, function (payload) {
-      console.log('[SyncVitals] realtime update received:', payload.new);
+      console.log('[SyncVitals] realtime nutrition update received');
       if (!payload.new || !payload.new.patient_id) return;
       svApplyNutritionRow(payload.new);
       if (_nutrView === 'adherence' && _nutrCurrentPid === payload.new.patient_id) renderNutrAdherence(_nutrCurrentPid);
@@ -3359,7 +3359,7 @@ function svSyncFromEngine(state) {
   state = state || window.SVEngine.loadState();
   svPatients.forEach(function (p) {
     const ep = state.patients[p.id];
-    if (!ep) { console.warn('[SyncVitals] no engine data for patient', p.id); return; }
+    if (!ep) { console.warn('[SyncVitals] no engine data for a patient'); return; }
     p.lastVitals = Object.assign({}, p.lastVitals, ep.vitals);
     // sodium was a static hardcoded seed value (only ever set for one
     // patient, never updated) driving ~10 different alerts/care-plan lines
@@ -5204,7 +5204,7 @@ function vfSubmit() {
 
   // Regenerate care plan
   const cp = generateCarePlan(p);
-  console.log('Care plan updated for', p.name, ':', cp.levelLabel);
+  console.log('Care plan updated:', cp.levelLabel);
 
   renderRegistry();
   // Re-render context so returning to nurse path shows updated data
