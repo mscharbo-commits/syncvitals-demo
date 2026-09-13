@@ -381,7 +381,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 </style>
 <script src="supabase-client.js"></script>
 <script src="lightweight-charts.js"></script>
-<script src="data-engine.js?v=1789317150"></script>
+<script src="data-engine.js?v=1789331299"></script>
 </head>
 <body>
 
@@ -543,6 +543,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
       <div class="sv-tab" onclick="svTab(this,'nt-nutrition')">🥗 Nutrition <span id="nutr-tab-badge" style="display:none;background:#E24B4A;color:#fff;font-size:9px;font-weight:700;padding:1px 5px;border-radius:10px;margin-left:3px;vertical-align:middle"></span></div>
       <div class="sv-tab" onclick="svTab(this,'nt-compare')">📊 Vitals Compare</div>
       <div class="sv-tab" onclick="svTab(this,'nt-appts')">📅 Appointments</div>
+      <div class="sv-tab" onclick="viewLatestPatientPdf(activePatientId || _nutrCurrentPid); return false;">📄 Patient PDF</div>
       <div class="sv-tab" onclick="svTab(this,'nt-doc')">Document</div>
     </div>
 
@@ -2237,6 +2238,192 @@ function setPdfFmt(fmt) {
   document.getElementById('fmt-clinical').style.color = fmt==='clinical' ? '#fff' : 'var(--sv-navy)';
   document.getElementById('fmt-clinical').style.borderColor = fmt==='clinical' ? 'var(--sv-navy)' : 'rgba(13,46,110,0.25)';
 }
+// Builds the full care plan PDF body HTML from structured data — used both
+// for live generation (downloadPdf, current checkbox state) and for viewing
+// a previously-generated document (viewLatestPatientPdf, stored snapshot).
+// Pulls nurse/physician/appointments from the REAL patient record instead
+// of hardcoded values, so this is correct for every patient, not just
+// whichever one the template was originally written against.
+function buildCarePlanPdfHtml(p, byCategory, meta, isClinical) {
+  const showAppts = meta.showAppts;
+  const inclEdu = meta.inclEdu;
+  const inclMeds = meta.inclMeds;
+  const inclNutr = meta.inclNutr;
+  const phaseBlocks = (isClinical ? [
+    {n:30, label:'Days 1–30 — Stabilization Phase', goal:'Verbalize understanding of condition · Initiate lifestyle changes · Maintain BP within identified range · Reduce BMI 2%', color:'#A32D2D', bg:'#fff5f5'},
+    {n:60, label:'Days 31–60 — Optimization Phase', goal:'Demonstrate appropriate changes in eating and exercise · Attain desirable body weight · BP consistently below 140/90', color:'#7A4500', bg:'#fffaf2'},
+    {n:90, label:'Days 61–90 — Sustainability Phase', goal:'Maintain BP within identified range · Sustain healthy body weight · Full self-management · Activity tolerance in daily routine', color:'#1A5C30', bg:'#f5fff8'}
+  ] : [
+    {n:30, label:'Days 1–30 — Getting Stable', goal:'What you are working toward: Know what high BP is and what your target numbers are · Take your medication every day · Start your food diary · Begin gentle daily walks', color:'#A32D2D', bg:'#fff5f5'},
+    {n:60, label:'Days 31–60 — Getting Better', goal:'What you are working toward: Walk more each day (up to 5,000 steps) · Follow the DASH eating plan · See your dietitian · Complete the education module', color:'#7A4500', bg:'#fffaf2'},
+    {n:90, label:'Days 61–90 — Staying Well', goal:'What you are working toward: Keep your BP below 135/85 · Maintain healthy habits on your own · Know your emergency plan by heart', color:'#1A5C30', bg:'#f5fff8'}
+  ]).filter(function (pb) { return !meta.phasesIncluded || meta.phasesIncluded.indexOf(pb.n) !== -1; });
+
+  const nurseName = p.nurse || 'Your Nurse';
+  const physicianName = p.physician || 'Your Physician';
+  const preparedDate = new Date().toLocaleDateString('en-US', { month:'long', day:'numeric', year:'numeric' });
+  const condStr = (p.conditions || []).join(', ') || '—';
+
+  let bodyHtml = `
+    <div style="font-family:Georgia,serif;max-width:700px;margin:0 auto;padding:20px;color:#1a1a2e">
+      <div style="border-bottom:3px solid #0D2E6E;padding-bottom:14px;margin-bottom:20px">
+        <div style="font-size:22px;font-weight:bold;color:#0D2E6E;margin-bottom:4px">SyncVitals — 30/60/90 Day Care Plan</div>
+        <div style="font-size:13px;color:#555;margin-bottom:2px">${isClinical ? 'CLINICAL VERSION — For chart and care team use only' : 'YOUR PERSONAL CARE PLAN — Written for you, ' + (p.name||'').split(' ')[0]}</div>
+        ${!isClinical ? '<div style="font-size:12px;color:#888;font-style:italic">This plan was made for you by your care team. Every step is written in plain language so it is easy to follow.</div>' : ''}
+        <table style="margin-top:12px;font-size:12px;color:#333;border-collapse:collapse;width:100%">
+          <tr><td style="padding:2px 20px 2px 0"><strong>Patient:</strong> ${p.name||'Patient'}</td><td style="padding:2px 20px 2px 0"><strong>MRN:</strong> ${p.mrn||'—'}</td><td><strong>Age:</strong> ${p.age||'—'}</td></tr>
+          <tr><td style="padding:2px 20px 2px 0"><strong>Diagnoses:</strong> ${condStr}</td><td><strong>Nurse:</strong> ${nurseName}</td></tr>
+          <tr><td style="padding:2px 20px 2px 0"><strong>Prepared by:</strong> ${nurseName} · ${physicianName}</td><td colspan="2"><strong>Date:</strong> ${preparedDate}</td></tr>
+          <tr><td colspan="3" style="padding-top:4px"><strong>Source:</strong> Care plan generated from SyncVitals care plan database</td></tr>
+        </table>
+      </div>
+      ${!isClinical ? `<div style="background:#e8f4fd;border:1px solid #3498db;border-radius:6px;padding:12px 16px;margin-bottom:16px;font-size:13px;color:#1a5276">
+        <strong>Hello, ${(p.name||'').split(' ')[0] || 'there'}.</strong> This is your personal 90-day care plan, written just for you. Each step below is something your care team has chosen to help you lower your blood pressure, protect your kidneys, and feel your best. Check off each item as you do it.<br><br>
+        Your nurse: <strong>${nurseName}</strong> &nbsp;·&nbsp; Your doctor: <strong>${physicianName}</strong>
+      </div>` : ''}
+      <div style="background:#fff3cd;border:1px solid #ffc107;border-radius:6px;padding:10px 14px;margin-bottom:20px;font-size:12px;color:#856404">
+        🚨 <strong>Call your nurse right away</strong> if: your BP reads above 180 · sudden severe headache · chest pain · vision changes · you gain 2 or more pounds in one day. &nbsp;<strong>Call 911</strong> for any life-threatening emergency.
+      </div>`;
+
+  phaseBlocks.forEach(function (pb) {
+    const cats = byCategory[pb.n] || {};
+    const phaseTotal = Object.values(cats).reduce(function (s, arr) { return s + arr.length; }, 0);
+
+    bodyHtml += `<div style="margin-bottom:28px">
+      <div style="background:${pb.bg};border-left:4px solid ${pb.color};padding:10px 14px;margin-bottom:12px">
+        <div style="font-size:15px;font-weight:bold;color:${pb.color}">${pb.label}</div>
+        <div style="font-size:11px;color:#666;margin-top:3px"><strong>Goals:</strong> ${pb.goal}</div>
+      </div>`;
+
+    if (phaseTotal === 0) {
+      bodyHtml += `<p style="font-size:12px;color:#999;font-style:italic;padding:4px 8px">No items selected for this phase.</p>`;
+    } else {
+      Object.entries(cats).forEach(function ([catName, items]) {
+        if (!items.length) return;
+        bodyHtml += `
+          <div style="margin-bottom:16px">
+            <div style="font-size:10px;font-weight:700;color:#444;text-transform:uppercase;
+                        letter-spacing:0.1em;border-bottom:1.5px solid ${pb.color}33;
+                        padding-bottom:4px;margin-bottom:8px;display:flex;align-items:center;gap:6px">
+              <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${pb.color}"></span>
+              ${catName}
+            </div>
+            <table style="width:100%;border-collapse:collapse">
+              ${items.map(function (txt) {
+                return `<tr>
+                  <td style="padding:4px 6px;vertical-align:top;width:18px;color:${pb.color};font-size:13px">${isClinical ? '□' : '☐'}</td>
+                  <td style="padding:4px 6px;font-size:${isClinical ? '12' : '13'}px;line-height:1.65;color:#222">${txt}</td>
+                </tr>`;
+              }).join('')}
+            </table>
+          </div>`;
+      });
+    }
+    bodyHtml += `</div>`;
+  });
+
+  if (showAppts) {
+    // Real appointment data if this patient has it on file — otherwise a
+    // clear "not yet configured" note instead of another patient's schedule.
+    let apptRows = '';
+    if (Array.isArray(p.appointments) && p.appointments.length) {
+      apptRows = p.appointments.slice().sort(function (a, b) { return a.day - b.day; }).map(function (a, i) {
+        return `<tr${i % 2 ? ' style="background:#f9f9f9"' : ''}><td style="padding:6px 7px">Day ${a.day}</td><td>${a.who}</td><td>${a.purpose}</td><td></td></tr>`;
+      }).join('');
+    } else {
+      apptRows = '<tr><td colspan="4" style="padding:10px 7px;color:#999;font-style:italic">No appointment schedule on file for this patient yet.</td></tr>';
+    }
+    bodyHtml += `
+      <div style="margin-bottom:24px;border-top:1px solid #ddd;padding-top:16px">
+        <div style="font-size:14px;font-weight:bold;color:#0D2E6E;margin-bottom:6px">📅 ${isClinical ? 'Appointment Schedule' : 'Your Upcoming Appointments'}</div>
+        ${!isClinical ? '<div style="font-size:12px;color:#666;margin-bottom:10px">These are the appointments your care team has planned for you. Bring this document to each visit.</div>' : ''}
+        <table style="width:100%;border-collapse:collapse;font-size:12px">
+          <tr style="background:#f0f4ff"><th style="padding:7px;text-align:left">Day</th><th style="padding:7px;text-align:left">Who</th><th style="padding:7px;text-align:left">Purpose</th><th style="padding:7px;text-align:left">Type</th></tr>
+          ${apptRows}
+        </table>
+      </div>`;
+  }
+
+  if (inclEdu) {
+    bodyHtml += `
+      <div style="margin-bottom:24px;border-top:1px solid #ddd;padding-top:16px">
+        <div style="font-size:14px;font-weight:bold;color:#0D2E6E;margin-bottom:6px">📚 ${isClinical ? 'Hypertension Education Module Summary' : 'Learn About Your Health — 4 Short Lessons'}</div>
+        ${!isClinical ? '<div style="font-size:12px;color:#666;margin-bottom:10px">These lessons are also available as an interactive module inside your SyncVitals app. Complete them at your own pace — each one takes about 2–3 minutes.</div>' : ''}
+        <div style="font-size:12px;color:#444;line-height:1.7">
+          <strong>Lesson 1 — What is high blood pressure?</strong><br>Blood pressure is the force of blood pushing against artery walls. Above 130/80 is elevated; above 140/90 requires treatment.<br><br>
+          <strong>Lesson 2 — What raises your blood pressure?</strong><br>For this patient: excess dietary sodium and limited physical activity are the primary identified drivers.<br><br>
+          <strong>Lesson 3 — BP and your kidneys</strong><br>CKD and hypertension create a feedback loop. Every 10-point reduction in systolic BP meaningfully slows kidney damage progression.<br><br>
+          <strong>Lesson 4 — Your 90-day journey</strong><br>Steps: medication adherence, sodium reduction, DASH diet, gradual activity increase.
+        </div>
+      </div>`;
+  }
+
+  if (!isClinical && inclMeds) {
+    const patientMedHtml = buildPatientMedPdfSection(p);
+    bodyHtml += patientMedHtml;
+  }
+
+  if (!isClinical && inclNutr) {
+    const nutrSection = buildNutritionPdfSection(p.id);
+    if (nutrSection) bodyHtml += nutrSection;
+  }
+
+  bodyHtml += `
+      <div style="border-top:1px solid #ddd;padding-top:12px;margin-top:8px;font-size:11px;color:#999;text-align:center">
+  ${isClinical ? 'CLINICAL DOCUMENT — Confidential · For chart use only · ' : 'This is your personal care plan · Keep it somewhere easy to find · '}Generated by SyncVitals · ${nurseName} · ${preparedDate}
+      </div>
+    </div>`;
+
+  return bodyHtml;
+}
+
+// Opens a built PDF body in a new print-ready window — shared by live
+// generation and stored-document viewing.
+function openPdfWindow(bodyHtml, patientName) {
+  const printWin = window.open('', '_blank', 'width=800,height=900');
+  printWin.document.write(`<!DOCTYPE html><html><head>
+    <title>Care Plan — ${patientName||'Patient'}</title>
+    <style>
+      @page { margin: 0.75in; }
+      body { margin: 0; padding: 0; font-family: Georgia, serif; }
+      @media print { button { display:none!important; } }
+    </style>
+  </head><body>
+    ${bodyHtml}
+    <div style="text-align:center;margin:24px 0 8px">
+      <button onclick="window.print()" style="background:#0D2E6E;color:#fff;border:none;padding:10px 28px;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;margin-right:10px">🖨️ Print / Save as PDF</button>
+      <button onclick="window.close()" style="background:#eee;color:#333;border:none;padding:10px 20px;border-radius:8px;font-size:14px;cursor:pointer">Close</button>
+    </div>
+    <script>setTimeout(()=>window.print(), 600);<\/script>
+  
+</body></html>`);
+  printWin.document.close();
+}
+
+// Opens the most recently generated PATIENT-facing PDF for whichever
+// patient is open, rebuilt from the real stored snapshot — not a live
+// re-generation from current checkbox state, but exactly what was actually
+// given to the patient last time.
+async function viewLatestPatientPdf(pid) {
+  const p = svPatients.find(function (x) { return x.id === pid; });
+  if (!p) return;
+  const toast = document.getElementById('sched-toast');
+  const doc = await getLatestCarePlanDocument(pid); // most recent of either type
+  const patientDoc = (doc && doc.doc_type === 'patient') ? doc : null;
+  if (!patientDoc) {
+    if (toast) { toast.textContent = '⚠ No patient PDF has been generated yet for ' + p.name + ' — use Export PDF in the 30/60/90 tab first'; toast.style.background='#EF9F27'; toast.style.display='block'; setTimeout(()=>{toast.style.display='none';toast.style.background='#1D9E75';},5000); }
+    return;
+  }
+  const bodyHtml = buildCarePlanPdfHtml(p, patientDoc.content.byCategory, {
+    showAppts: patientDoc.content.includesAppointments,
+    inclEdu: false,
+    inclMeds: patientDoc.content.includesMeds,
+    inclNutr: patientDoc.content.includesNutrition,
+    phasesIncluded: patientDoc.content.phasesIncluded,
+  }, false);
+  openPdfWindow(bodyHtml, p.name);
+}
+
 function downloadPdf() {
   closePdfModal();
 
@@ -2347,29 +2534,7 @@ function downloadPdf() {
   const apptsCb = document.getElementById('pdf-appts');
   const showAppts = !apptsCb || apptsCb.checked;
 
-  let bodyHtml = `
-    <div style="font-family:Georgia,serif;max-width:700px;margin:0 auto;padding:20px;color:#1a1a2e">
-      <div style="border-bottom:3px solid #0D2E6E;padding-bottom:14px;margin-bottom:20px">
-        <div style="font-size:22px;font-weight:bold;color:#0D2E6E;margin-bottom:4px">SyncVitals — 30/60/90 Day Care Plan</div>
-        <div style="font-size:13px;color:#555;margin-bottom:2px">${isClinical ? 'CLINICAL VERSION — For chart and care team use only' : 'YOUR PERSONAL CARE PLAN — Written for you, ' + (window._activePtName||'').split(' ')[0]}</div>
-        ${!isClinical ? '<div style="font-size:12px;color:#888;font-style:italic">This plan was made for you by your care team. Every step is written in plain language so it is easy to follow.</div>' : ''}
-        <table style="margin-top:12px;font-size:12px;color:#333;border-collapse:collapse;width:100%">
-          <tr><td style="padding:2px 20px 2px 0"><strong>Patient:</strong> ${window._activePtName||'Patient'}</td><td style="padding:2px 20px 2px 0"><strong>MRN:</strong> ${window._activePtMrn||'—'}</td><td><strong>Age:</strong> ${window._activePtAge||'—'}</td></tr>
-          <tr><td style="padding:2px 20px 2px 0"><strong>Diagnoses:</strong> ${window._activePtCond||'—'}</td><td><strong>Nurse:</strong> ${window._activePtNurse||'—'}</td></tr>
-          <tr><td style="padding:2px 20px 2px 0"><strong>Prepared by:</strong> Nurse R. Santos · Dr. James Osei</td><td colspan="2"><strong>Date:</strong> April 9, 2026</td></tr>
-          <tr><td colspan="3" style="padding-top:4px"><strong>Source:</strong> RPM_care_plan.docx — Your organizations HTN care plan (ICD-10 I10)</td></tr>
-        </table>
-      </div>
-      ${!isClinical ? `<div style="background:#e8f4fd;border:1px solid #3498db;border-radius:6px;padding:12px 16px;margin-bottom:16px;font-size:13px;color:#1a5276">
-        <strong>Hello, ${(window._activePtName||'').split(' ')[0] || 'there'}.</strong> This is your personal 90-day care plan, written just for you. Each step below is something your care team has chosen to help you lower your blood pressure, protect your kidneys, and feel your best. Check off each item as you do it.<br><br>
-        Your nurse: <strong>Nurse R. Santos</strong> &nbsp;·&nbsp; Your doctor: <strong>Dr. James Osei</strong>
-      </div>` : ''}
-      <div style="background:#fff3cd;border:1px solid #ffc107;border-radius:6px;padding:10px 14px;margin-bottom:20px;font-size:12px;color:#856404">
-        🚨 <strong>Call your nurse right away</strong> if: your BP reads above 180 · sudden severe headache · chest pain · vision changes · you gain 2 or more pounds in one day. &nbsp;<strong>Call 911</strong> for any life-threatening emergency.
-      </div>`;
-
-  // Check if any items were collected at all
-  // totalItems already declared above
+  // Check if any items were collected at all — totalItems already declared above
   if (totalItems === 0) {
     const printWin2 = window.open('', '_blank', 'width=600,height=400');
     if (printWin2) {
@@ -2380,6 +2545,8 @@ function downloadPdf() {
     if (toast) { toast.textContent = '⚠ No items checked — check boxes to include items'; toast.style.background='#EF9F27'; toast.style.display='block'; setTimeout(()=>{toast.style.display='none';toast.style.background='#1D9E75';},4000); }
     return;
   }
+
+  const pdfPatient = svPatients.find(x => x.id === activePatientId);
 
   // Save a structured record of exactly what was generated — so a nurse (or
   // the AI assistant) can later answer "what did we actually give this
@@ -2392,117 +2559,12 @@ function downloadPdf() {
     includesNutrition: inclNutr,
   }, totalItems);
 
+  const bodyHtml = buildCarePlanPdfHtml(pdfPatient || { name: window._activePtName, mrn: window._activePtMrn, age: window._activePtAge, conditions: (window._activePtCond||'').split(', '), nurse: window._activePtNurse, id: activePatientId }, byCategory, {
+    showAppts: showAppts, inclEdu: inclEdu, inclMeds: inclMeds, inclNutr: inclNutr,
+    phasesIncluded: phaseBlocks.map(function (p) { return p.n; }),
+  }, isClinical);
 
-  phaseBlocks.forEach(p => {
-    const cats = byCategory[p.n] || {};
-    const phaseTotal = Object.values(cats).reduce((s, arr) => s + arr.length, 0);
-
-    bodyHtml += `<div style="margin-bottom:28px">
-      <div style="background:${p.bg};border-left:4px solid ${p.color};padding:10px 14px;margin-bottom:12px">
-        <div style="font-size:15px;font-weight:bold;color:${p.color}">${p.label}</div>
-        <div style="font-size:11px;color:#666;margin-top:3px"><strong>Goals:</strong> ${p.goal}</div>
-      </div>`;
-
-    if (phaseTotal === 0) {
-      bodyHtml += `<p style="font-size:12px;color:#999;font-style:italic;padding:4px 8px">No items selected for this phase.</p>`;
-    } else {
-      Object.entries(cats).forEach(([catName, items]) => {
-        if (!items.length) return;
-        bodyHtml += `
-          <div style="margin-bottom:16px">
-            <div style="font-size:10px;font-weight:700;color:#444;text-transform:uppercase;
-                        letter-spacing:0.1em;border-bottom:1.5px solid ${p.color}33;
-                        padding-bottom:4px;margin-bottom:8px;display:flex;align-items:center;gap:6px">
-              <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${p.color}"></span>
-              ${catName}
-            </div>
-            <table style="width:100%;border-collapse:collapse">
-              ${items.map(txt =>
-                `<tr>
-                  <td style="padding:4px 6px;vertical-align:top;width:18px;color:${p.color};font-size:13px">${isClinical ? '□' : '☐'}</td>
-                  <td style="padding:4px 6px;font-size:${isClinical ? '12' : '13'}px;line-height:1.65;color:#222">${txt}</td>
-                </tr>`
-              ).join('')}
-            </table>
-          </div>`;
-      });
-    }
-    bodyHtml += `</div>`;
-  });
-
-  if(showAppts) {
-    bodyHtml += `
-      <div style="margin-bottom:24px;border-top:1px solid #ddd;padding-top:16px">
-        <div style="font-size:14px;font-weight:bold;color:#0D2E6E;margin-bottom:6px">📅 ${isClinical ? 'Appointment Schedule' : 'Your Upcoming Appointments'}</div>
-        ${!isClinical ? '<div style="font-size:12px;color:#666;margin-bottom:10px">These are the appointments your care team has planned for you. Bring this document to each visit.</div>' : ''}
-        <table style="width:100%;border-collapse:collapse;font-size:12px">
-          <tr style="background:#f0f4ff"><th style="padding:7px;text-align:left">Day</th><th style="padding:7px;text-align:left">Who</th><th style="padding:7px;text-align:left">Purpose</th><th style="padding:7px;text-align:left">Type</th></tr>
-          <tr><td style="padding:6px 7px">Days 1–2</td><td>Nurse R. Santos</td><td>Medication confirmation + BP recheck</td><td>📞 Phone</td></tr>
-          <tr style="background:#f9f9f9"><td style="padding:6px 7px">Days 7, 14, 21</td><td>Nurse R. Santos</td><td>Weekly check-in — BP log, diet diary</td><td>📞 Phone</td></tr>
-          <tr><td style="padding:6px 7px">Day 14</td><td>Dr. James Osei</td><td>Lisinopril dose review, GFR labs</td><td>🩺 Telehealth</td></tr>
-          <tr style="background:#f9f9f9"><td style="padding:6px 7px">Day 35</td><td>Dietitian</td><td>Personalized DASH meal plan</td><td>🍎 Telehealth</td></tr>
-          <tr><td style="padding:6px 7px">Day 45</td><td>Dr. James Osei</td><td>Labs review: GFR, BMP, K+</td><td>🔬 Lab + visit</td></tr>
-          <tr style="background:#f9f9f9"><td style="padding:6px 7px">Day 75</td><td>Dr. James Osei</td><td>RPM frequency reassessment</td><td>🩺 Telehealth</td></tr>
-          <tr><td style="padding:6px 7px">Day 80</td><td>Lab</td><td>GFR, BMP, potassium, lipid panel</td><td>🔬 Lab draw</td></tr>
-          <tr style="background:#f9f9f9"><td style="padding:6px 7px">Day 90</td><td>Full care team</td><td>Goals review + step-down eligibility</td><td>📋 Review</td></tr>
-        </table>
-      </div>`;
-  }
-
-  if(inclEdu) {
-    bodyHtml += `
-      <div style="margin-bottom:24px;border-top:1px solid #ddd;padding-top:16px">
-        <div style="font-size:14px;font-weight:bold;color:#0D2E6E;margin-bottom:6px">📚 ${isClinical ? 'Hypertension Education Module Summary' : 'Learn About Your Health — 4 Short Lessons'}</div>
-        ${!isClinical ? '<div style="font-size:12px;color:#666;margin-bottom:10px">These lessons are also available as an interactive module inside your SyncVitals app. Complete them at your own pace — each one takes about 2–3 minutes.</div>' : ''}
-        <div style="font-size:12px;color:#444;line-height:1.7">
-          <strong>Lesson 1 — What is high blood pressure?</strong><br>Blood pressure is the force of blood pushing against artery walls. Above 130/80 is elevated; above 140/90 requires treatment. Current: 172/98.<br><br>
-          <strong>Lesson 2 — What raises your blood pressure?</strong><br>For this patient: excess dietary sodium and limited physical activity are the primary identified drivers.<br><br>
-          <strong>Lesson 3 — BP and your kidneys</strong><br>CKD Stage 3 and hypertension create a feedback loop. Every 10-point reduction in systolic BP meaningfully slows kidney damage progression.<br><br>
-          <strong>Lesson 4 — Your 90-day journey</strong><br>Day 1: 172 → Day 30 goal: &lt;160 → Day 60 goal: &lt;140 → Day 90 goal: &lt;135/85. Steps: medication adherence, sodium reduction, DASH diet, gradual activity increase.
-        </div>
-      </div>`;
-  }
-
-  // ── ADD MEDICATION SECTION TO PATIENT PDF ──
-  if (!isClinical && inclMeds) {
-    const p = svPatients.find(x => x.id === activePatientId);
-    if (p) {
-      const patientMedHtml = buildPatientMedPdfSection(p);
-      bodyHtml += patientMedHtml;
-    }
-  }
-
-  // ── ADD NUTRITION SECTION TO PATIENT PDF ──
-  if (!isClinical && inclNutr) {
-    const nutrPid = activePatientId || _nutrCurrentPid;
-    const nutrSection = buildNutritionPdfSection(nutrPid);
-    if (nutrSection) bodyHtml += nutrSection;
-  }
-
-  bodyHtml += `
-      <div style="border-top:1px solid #ddd;padding-top:12px;margin-top:8px;font-size:11px;color:#999;text-align:center">
-  ${isClinical ? 'CLINICAL DOCUMENT — Confidential · For chart use only · ' : 'This is your personal care plan · Keep it somewhere easy to find · '}Generated by SyncVitals · ${window._activePtNurse||'Your Nurse'} · ${new Date().toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'})}
-      </div>
-    </div>`;
-
-  const printWin = window.open('', '_blank', 'width=800,height=900');
-  printWin.document.write(`<!DOCTYPE html><html><head>
-    <title>Care Plan — ${window._activePtName||'Patient'}</title>
-    <style>
-      @page { margin: 0.75in; }
-      body { margin: 0; padding: 0; font-family: Georgia, serif; }
-      @media print { button { display:none!important; } }
-    </style>
-  </head><body>
-    ${bodyHtml}
-    <div style="text-align:center;margin:24px 0 8px">
-      <button onclick="window.print()" style="background:#0D2E6E;color:#fff;border:none;padding:10px 28px;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;margin-right:10px">🖨️ Print / Save as PDF</button>
-      <button onclick="window.close()" style="background:#eee;color:#333;border:none;padding:10px 20px;border-radius:8px;font-size:14px;cursor:pointer">Close</button>
-    </div>
-    <script>setTimeout(()=>window.print(), 600);<\/script>
-  
-</body></html>`);
-  printWin.document.close();
+  openPdfWindow(bodyHtml, pdfPatient ? pdfPatient.name : window._activePtName);
 
   const toast = document.getElementById('sched-toast');
   toast.textContent = '✓ PDF ready — use Print → Save as PDF';
