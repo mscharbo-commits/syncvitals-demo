@@ -381,7 +381,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 </style>
 <script src="supabase-client.js"></script>
 <script src="lightweight-charts.js"></script>
-<script src="data-engine.js?v=1789331573"></script>
+<script src="data-engine.js?v=1789331776"></script>
 </head>
 <body>
 
@@ -543,7 +543,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
       <div class="sv-tab" onclick="svTab(this,'nt-nutrition')">🥗 Nutrition <span id="nutr-tab-badge" style="display:none;background:#E24B4A;color:#fff;font-size:9px;font-weight:700;padding:1px 5px;border-radius:10px;margin-left:3px;vertical-align:middle"></span></div>
       <div class="sv-tab" onclick="svTab(this,'nt-compare')">📊 Vitals Compare</div>
       <div class="sv-tab" onclick="svTab(this,'nt-appts')">📅 Appointments</div>
-      <div class="sv-tab" onclick="viewLatestPatientPdf(activePatientId || _nutrCurrentPid); return false;">📄 Patient PDF</div>
+      <div class="sv-tab" onclick="svTab(this,'nt-patientpdf')">📄 Patient PDF</div>
       <div class="sv-tab" onclick="svTab(this,'nt-doc')">Document</div>
     </div>
 
@@ -1118,6 +1118,18 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     </div>
   </div>
 </div>
+<div id="nt-patientpdf" class="sv-tc">
+  <div id="nt-patientpdf-content" style="padding:12px">
+    <div style="font-size:12px;color:#aaa;padding:20px;text-align:center" id="nt-patientpdf-empty">Loading…</div>
+    <div id="nt-patientpdf-body" style="display:none">
+      <div style="display:flex;justify-content:flex-end;margin-bottom:10px">
+        <button onclick="printCurrentPatientPdf()" style="background:var(--sv-navy);color:#fff;border:none;padding:8px 16px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer">🖨️ Open for printing</button>
+      </div>
+      <div id="nt-patientpdf-frame" style="border:1px solid #eee;border-radius:8px;background:#fff;max-height:70vh;overflow-y:auto;padding:8px"></div>
+    </div>
+  </div>
+</div>
+
 
 </div>
   
@@ -5208,6 +5220,58 @@ function renderAppointments(pid) {
   if (listEl) listEl.innerHTML = rows;
 }
 
+// ── PATIENT PDF TAB ──
+// Renders the most recently generated patient-facing care plan document
+// directly in the app, in the same framework as every other tab — not a
+// separate popup window, which is fragile (blockable, easy to lose track
+// of). A "print" button is offered separately for when a nurse actually
+// wants a physical/PDF copy, opened only on that explicit click so it's
+// a direct user gesture the browser won't block.
+let _currentPatientPdfHtml = '';
+let _currentPatientPdfName = '';
+async function renderPatientPdf(pid) {
+  const emptyEl = document.getElementById('nt-patientpdf-empty');
+  const bodyEl = document.getElementById('nt-patientpdf-body');
+  const p = svPatients.find(function (x) { return x.id === pid; });
+  if (!p) { if (emptyEl) { emptyEl.style.display = ''; emptyEl.textContent = 'Select a patient to view their PDF'; } if (bodyEl) bodyEl.style.display = 'none'; return; }
+
+  if (emptyEl) { emptyEl.style.display = ''; emptyEl.textContent = 'Loading…'; }
+  if (bodyEl) bodyEl.style.display = 'none';
+
+  const doc = await getLatestCarePlanDocument(pid);
+  const patientDoc = (doc && doc.doc_type === 'patient') ? doc : null;
+
+  if (!patientDoc) {
+    if (emptyEl) { emptyEl.style.display = ''; emptyEl.textContent = 'No patient PDF has been generated yet for ' + p.name + ' — use Export PDF in the 30/60/90 tab first.'; }
+    if (bodyEl) bodyEl.style.display = 'none';
+    return;
+  }
+
+  const bodyHtml = buildCarePlanPdfHtml(p, patientDoc.content.byCategory, {
+    showAppts: patientDoc.content.includesAppointments,
+    inclEdu: false,
+    inclMeds: patientDoc.content.includesMeds,
+    inclNutr: patientDoc.content.includesNutrition,
+    phasesIncluded: patientDoc.content.phasesIncluded,
+  }, false);
+
+  _currentPatientPdfHtml = bodyHtml;
+  _currentPatientPdfName = p.name;
+
+  if (emptyEl) emptyEl.style.display = 'none';
+  if (bodyEl) bodyEl.style.display = '';
+  const frame = document.getElementById('nt-patientpdf-frame');
+  if (frame) frame.innerHTML = bodyHtml;
+}
+
+// Opens the already-rendered PDF in a print-ready window — only called
+// directly from a click, so it's a genuine user gesture and won't be
+// blocked by the browser's popup blocker.
+function printCurrentPatientPdf() {
+  if (!_currentPatientPdfHtml) return;
+  openPdfWindow(_currentPatientPdfHtml, _currentPatientPdfName);
+}
+
 // ── SMART CARE PLAN PRE-SELECTION ──
 // Checks only the items relevant to THIS patient vitals and conditions.
 // Nurse sees pre-selected suggestions and can check/uncheck freely.
@@ -7915,6 +7979,10 @@ function svTab(el,name){
   if (name === 'nt-appts') {
     const pid = activePatientId || _nutrCurrentPid;
     if (pid) renderAppointments(pid);
+  }
+  if (name === 'nt-patientpdf') {
+    const pid = activePatientId || _nutrCurrentPid;
+    if (pid) renderPatientPdf(pid);
   }
 }
 function svInsert(txt){document.getElementById('sv-reply').value=txt}
