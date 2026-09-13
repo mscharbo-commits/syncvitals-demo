@@ -381,7 +381,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 </style>
 <script src="supabase-client.js"></script>
 <script src="lightweight-charts.js"></script>
-<script src="data-engine.js?v=1789312750"></script>
+<script src="data-engine.js?v=1789313014"></script>
 </head>
 <body>
 
@@ -2946,9 +2946,19 @@ function renderAiAssistMessages() {
   }
   el.innerHTML = _aiAssistHistory.map(function (m) {
     const isUser = m.role === 'user';
-    return '<div style="align-self:' + (isUser ? 'flex-end' : 'flex-start') + ';max-width:88%;background:' + (isUser ? 'var(--sv-navy)' : '#F0F4F8') + ';color:' + (isUser ? '#fff' : '#222') + ';border-radius:12px;padding:9px 13px;font-size:13px;line-height:1.5;white-space:pre-wrap">' + m.content.replace(/</g, '&lt;') + '</div>';
+    return '<div style="align-self:' + (isUser ? 'flex-end' : 'flex-start') + ';max-width:88%;background:' + (isUser ? 'var(--sv-navy)' : '#F0F4F8') + ';color:' + (isUser ? '#fff' : '#222') + ';border-radius:12px;padding:9px 13px;font-size:13px;line-height:1.5;white-space:pre-wrap">' + (m.content || '(no response)').replace(/</g, '&lt;') + '</div>';
   }).join('');
   el.scrollTop = el.scrollHeight;
+}
+
+// Claude's response content array isn't always [text] — extended thinking
+// (or other block types) can appear first, with the actual text response
+// later in the array. Blindly reading content[0].text breaks when that
+// happens. This finds the actual text block wherever it is.
+function extractClaudeText(data) {
+  if (!data || !Array.isArray(data.content)) return '';
+  const textBlock = data.content.find(function (b) { return b && b.type === 'text'; });
+  return textBlock ? textBlock.text : '';
 }
 
 let _aiAssistSending = false;
@@ -2998,7 +3008,7 @@ async function aiAssistSend() {
       console.error('[AIAssist] API error:', data.error);
       _aiAssistHistory.push({ role: 'assistant', content: 'Sorry, I ran into an error: ' + (data.error || 'unknown error') + '. Please try again.' });
     } else {
-      const text = data.content && data.content[0] ? data.content[0].text : 'No response.';
+      const text = extractClaudeText(data) || 'No response.';
       _aiAssistHistory.push({ role: 'assistant', content: text });
     }
   } catch (e) {
@@ -3027,7 +3037,7 @@ async function runAICarePlanAnalysis(fileName, content) {
     });
     if (!resp.ok) throw new Error('API error');
     const data = await resp.json();
-    const text = data.content && data.content[0] ? data.content[0].text : '';
+    const text = extractClaudeText(data);
     resultEl.innerHTML = '<div style="background:#EAF3DE;border:1px solid #B0D4A0;border-radius:8px;padding:12px;font-size:12px;color:#1B4F1B;line-height:1.6"><strong>✨ AI Analysis:</strong><br>' + text.replace(/\n/g, '<br>') + '</div>';
   } catch(e) {
     resultEl.innerHTML = '<div style="font-size:11px;color:#aaa;padding:8px 0">AI analysis unavailable — care plan imported successfully.</div>';
@@ -8658,7 +8668,7 @@ async function nutrAIBuild() {
     });
     if (!resp.ok) throw new Error('API ' + resp.status);
     const data = await resp.json();
-    const text = (data.content && data.content[0]) ? data.content[0].text : '';
+    const text = extractClaudeText(data);
     let plan;
     try { const m = text.match(/\{[\s\S]*\}/); plan = JSON.parse(m ? m[0] : text); }
     catch(e) { plan = _nutrRuleBasedPlan(p, framework, caloriesSel, strict, activity); plan.method = 'ai-fallback'; }
@@ -8901,9 +8911,9 @@ function nutrClear() {
   </div>
   <div id="ai-assist-messages" style="flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:12px"></div>
   <div style="padding:10px;display:flex;flex-wrap:wrap;gap:6px;border-top:1px solid #f0f0f0">
-    <button onclick="aiAssistQuickAsk('Summarize this patient&#39;s last 2 weeks')" style="font-size:11px;padding:5px 10px;border-radius:14px;border:1px solid #ddd;background:#fafafa;color:#555;cursor:pointer">Summarize last 2 weeks</button>
-    <button onclick="aiAssistQuickAsk('Why did this patient&#39;s risk score change recently?')" style="font-size:11px;padding:5px 10px;border-radius:14px;border:1px solid #ddd;background:#fafafa;color:#555;cursor:pointer">Why did risk change?</button>
-    <button onclick="aiAssistQuickAsk('Draft a physician escalation message for this patient')" style="font-size:11px;padding:5px 10px;border-radius:14px;border:1px solid #ddd;background:#fafafa;color:#555;cursor:pointer">Draft escalation message</button>
+    <button data-prompt="Summarize this patient's last 2 weeks" onclick="aiAssistQuickAsk(this.dataset.prompt)" style="font-size:11px;padding:5px 10px;border-radius:14px;border:1px solid #ddd;background:#fafafa;color:#555;cursor:pointer">Summarize last 2 weeks</button>
+    <button data-prompt="Why did this patient's risk score change recently?" onclick="aiAssistQuickAsk(this.dataset.prompt)" style="font-size:11px;padding:5px 10px;border-radius:14px;border:1px solid #ddd;background:#fafafa;color:#555;cursor:pointer">Why did risk change?</button>
+    <button data-prompt="Draft a physician escalation message for this patient" onclick="aiAssistQuickAsk(this.dataset.prompt)" style="font-size:11px;padding:5px 10px;border-radius:14px;border:1px solid #ddd;background:#fafafa;color:#555;cursor:pointer">Draft escalation message</button>
   </div>
   <div style="padding:12px;border-top:1px solid #eee;display:flex;gap:8px;flex-shrink:0">
     <input id="ai-assist-input" type="text" placeholder="Ask about this patient…" onkeydown="if(event.key==='Enter')aiAssistSend()" style="flex:1;padding:10px 12px;border:1px solid #ddd;border-radius:10px;font-size:13px">
