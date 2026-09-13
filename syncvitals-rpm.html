@@ -381,7 +381,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 </style>
 <script src="supabase-client.js"></script>
 <script src="lightweight-charts.js"></script>
-<script src="data-engine.js?v=1789331776"></script>
+<script src="data-engine.js?v=1789331920"></script>
 </head>
 <body>
 
@@ -2413,52 +2413,6 @@ function openPdfWindow(bodyHtml, patientName, existingWin) {
   printWin.document.close();
 }
 
-// Opens the most recently generated PATIENT-facing PDF for whichever
-// patient is open, rebuilt from the real stored snapshot — not a live
-// re-generation from current checkbox state, but exactly what was actually
-// given to the patient last time.
-async function viewLatestPatientPdf(pid) {
-  console.log('[PatientPDF] called with pid=', pid);
-  // Open the window SYNCHRONOUSLY, immediately on click, before any await —
-  // browsers block window.open() calls that happen after an async gap
-  // because they no longer look like a direct response to the user's click.
-  const printWin = window.open('', '_blank', 'width=800,height=900');
-  if (printWin) {
-    printWin.document.write('<html><body style="font-family:sans-serif;padding:40px;text-align:center;color:#888">Loading patient PDF…</body></html>');
-  } else {
-    console.error('[PatientPDF] popup blocked by browser — window.open returned null');
-  }
-  try {
-    const p = svPatients.find(function (x) { return x.id === pid; });
-    if (!p) { console.warn('[PatientPDF] no patient found for pid=', pid); if (printWin) printWin.close(); return; }
-    console.log('[PatientPDF] patient found:', p.name, '- fetching latest document...');
-    const toast = document.getElementById('sched-toast');
-    const doc = await getLatestCarePlanDocument(pid); // most recent of either type
-    console.log('[PatientPDF] getLatestCarePlanDocument returned:', doc);
-    const patientDoc = (doc && doc.doc_type === 'patient') ? doc : null;
-    if (!patientDoc) {
-      console.log('[PatientPDF] no patient-type document found (doc_type was:', doc && doc.doc_type, ') - showing toast');
-      if (printWin) printWin.close();
-      if (toast) { toast.textContent = '⚠ No patient PDF has been generated yet for ' + p.name + ' — use Export PDF in the 30/60/90 tab first'; toast.style.background='#EF9F27'; toast.style.display='block'; setTimeout(()=>{toast.style.display='none';toast.style.background='#1D9E75';},5000); }
-      else console.error('[PatientPDF] toast element not found either - nothing visible will happen');
-      return;
-    }
-    console.log('[PatientPDF] building PDF from stored document, writing to already-open window...');
-    const bodyHtml = buildCarePlanPdfHtml(p, patientDoc.content.byCategory, {
-      showAppts: patientDoc.content.includesAppointments,
-      inclEdu: false,
-      inclMeds: patientDoc.content.includesMeds,
-      inclNutr: patientDoc.content.includesNutrition,
-      phasesIncluded: patientDoc.content.phasesIncluded,
-    }, false);
-    openPdfWindow(bodyHtml, p.name, printWin);
-    console.log('[PatientPDF] openPdfWindow called successfully');
-  } catch (e) {
-    console.error('[PatientPDF] EXCEPTION:', e);
-    if (printWin) printWin.close();
-  }
-}
-
 function downloadPdf() {
   closePdfModal();
 
@@ -3644,15 +3598,18 @@ async function saveCarePlanDocument(pid, docType, byCategory, meta, totalItems) 
   } catch (e) { console.error('[SyncVitals] care plan document save threw an exception:', e); }
 }
 
-// Fetches the most recent generated document for a patient (either type),
-// used by the AI assistant to know what was actually given to the patient.
-async function getLatestCarePlanDocument(pid) {
+// Fetches the most recent generated document for a patient. Pass docType
+// ('patient' or 'clinical') to get the most recent of specifically that
+// type — without this, a clinical version generated after a patient
+// version would incorrectly "win" as the most recent overall, even when
+// the caller specifically wants the patient-facing one.
+async function getLatestCarePlanDocument(pid, docType) {
   const sb = svGetClient();
   if (!sb || !pid) return null;
   try {
-    const { data, error } = await sb.from('care_plan_documents')
-      .select('*').eq('patient_id', pid)
-      .order('generated_at', { ascending: false }).limit(1);
+    let query = sb.from('care_plan_documents').select('*').eq('patient_id', pid);
+    if (docType) query = query.eq('doc_type', docType);
+    const { data, error } = await query.order('generated_at', { ascending: false }).limit(1);
     if (error || !data || !data.length) return null;
     return data[0];
   } catch (e) { console.error('[SyncVitals] fetching latest care plan document threw an exception:', e); return null; }
@@ -5238,8 +5195,7 @@ async function renderPatientPdf(pid) {
   if (emptyEl) { emptyEl.style.display = ''; emptyEl.textContent = 'Loading…'; }
   if (bodyEl) bodyEl.style.display = 'none';
 
-  const doc = await getLatestCarePlanDocument(pid);
-  const patientDoc = (doc && doc.doc_type === 'patient') ? doc : null;
+  const patientDoc = await getLatestCarePlanDocument(pid, 'patient');
 
   if (!patientDoc) {
     if (emptyEl) { emptyEl.style.display = ''; emptyEl.textContent = 'No patient PDF has been generated yet for ' + p.name + ' — use Export PDF in the 30/60/90 tab first.'; }
