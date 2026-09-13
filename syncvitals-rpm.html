@@ -381,7 +381,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 </style>
 <script src="supabase-client.js"></script>
 <script src="lightweight-charts.js"></script>
-<script src="data-engine.js?v=1789258519"></script>
+<script src="data-engine.js?v=1789258863"></script>
 </head>
 <body>
 
@@ -4223,17 +4223,19 @@ function renderTrendLegend(entry) {
   const e = entry || _trendCurrentHistory[_trendCurrentHistory.length - 1];
   if (!e) { legendEl.innerHTML = ''; return; }
   const dateTag = entry ? (' \u00b7 ' + new Date(entry.ts).toLocaleDateString('en-US', {month:'short', day:'numeric'})) : '';
-  function chip(color, label, value) {
+  function chip(color, label, value, breached) {
+    const valColor = breached ? '#A32D2D' : '#222';
     return '<span style="display:inline-flex;align-items:baseline;gap:6px;white-space:nowrap">' +
       '<span style="width:10px;height:10px;border-radius:2px;background:' + color + ';display:inline-block;flex-shrink:0"></span>' +
-      '<span style="font-size:17px;font-weight:700;color:#222">' + label + ': ' + value + '</span></span>';
+      '<span style="font-size:17px;font-weight:700;color:' + valColor + '">' + label + ': ' + value + (breached ? ' \u26a0' : '') + '</span></span>';
   }
-  const bpChip = chip('#185FA5', 'BP', (e.sbp != null ? e.sbp : '\u2014') + '/' + (e.dbp != null ? e.dbp : '\u2014') + ' mmHg' + dateTag);
+  const bpBreached = isBreached('sbp', e.sbp, {}) || isBreached('dbp', e.dbp, {});
+  const bpChip = chip('#185FA5', 'BP', (e.sbp != null ? e.sbp : '\u2014') + '/' + (e.dbp != null ? e.dbp : '\u2014') + ' mmHg' + dateTag, bpBreached);
   const metricChips = _trendChart ? _trendCurrentMetrics.map(function(m, i) {
     const color = TREND_PANE_COLORS[i % TREND_PANE_COLORS.length];
     const val = e[m.key];
     const cadenceTag = m.cadence === 'weekly' ? ' \u00b7 weekly' : '';
-    return chip(color, m.label, (val != null ? val : '\u2014') + ' ' + m.unit + (entry ? dateTag : cadenceTag));
+    return chip(color, m.label, (val != null ? val : '\u2014') + ' ' + m.unit + (entry ? dateTag : cadenceTag), isBreached(m.key, val, {}));
   }) : [];
   legendEl.innerHTML = [bpChip].concat(metricChips).join('');
 }
@@ -4676,7 +4678,7 @@ function refreshCompareChartSizes() {
 function isBreached(key, val, goals) {
   if (val == null) return false;
   const highLimits = {
-    sbp: 140, dbp: 90, hr: 100, bloodGlucose: 180,
+    sbp: 140, dbp: 90, hr: 100, bloodGlucose: 180, glucose: 180,
     sodium: goals.sodium, calories: goals.calories, dietPotassium: goals.potassium,
     carbs: goals.carbs, sugar: goals.sugar, phosphorus: goals.phosphorus,
   };
