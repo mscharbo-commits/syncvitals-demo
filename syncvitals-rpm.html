@@ -381,7 +381,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 </style>
 <script src="supabase-client.js"></script>
 <script src="lightweight-charts.js"></script>
-<script src="data-engine.js?v=1789314298"></script>
+<script src="data-engine.js?v=1789314597"></script>
 </head>
 <body>
 
@@ -2361,6 +2361,17 @@ function downloadPdf() {
     return;
   }
 
+  // Save a structured record of exactly what was generated — so a nurse (or
+  // the AI assistant) can later answer "what did we actually give this
+  // patient" instead of that only existing as a downloaded file nobody can
+  // reference again.
+  saveCarePlanDocument(activePatientId, isClinical ? 'clinical' : 'patient', byCategory, {
+    phasesIncluded: phaseBlocks.map(function (p) { return p.n; }),
+    includesAppointments: showAppts,
+    includesMeds: inclMeds,
+    includesNutrition: inclNutr,
+  }, totalItems);
+
 
   phaseBlocks.forEach(p => {
     const cats = byCategory[p.n] || {};
@@ -2921,7 +2932,7 @@ function aiAssistQuickAsk(q) {
 // Assembles real, current data for whichever patient is open — reuses the
 // same data-building functions as Vitals Compare so the assistant's picture
 // of the patient matches exactly what the nurse is looking at on screen.
-function buildAiAssistContext(pid) {
+async function buildAiAssistContext(pid) {
   const p = svPatients.find(function (x) { return x.id === pid; });
   if (!p) return 'No patient is currently open. Answer only general questions, and ask the user to open a patient for anything patient-specific.';
 
@@ -2959,6 +2970,25 @@ function buildAiAssistContext(pid) {
     } else {
       lines.push('No further appointments scheduled in the current care plan (Day ' + daysSinceEnrollment + ' of plan).');
     }
+  }
+
+  // What was actually given to this patient, if a care plan document has
+  // ever been generated for them — grounds "what did we give this patient"
+  // in the real, saved record instead of the assistant guessing.
+  const latestDoc = await getLatestCarePlanDocument(pid);
+  if (latestDoc) {
+    const daysAgo = Math.floor((Date.now() - new Date(latestDoc.generated_at).getTime()) / 86400000);
+    const categoryCounts = [];
+    const byCat = (latestDoc.content && latestDoc.content.byCategory) || {};
+    Object.keys(byCat).forEach(function (phase) {
+      Object.keys(byCat[phase]).forEach(function (cat) {
+        categoryCounts.push(cat + ' (' + byCat[phase][cat].length + ' items, Day ' + phase + ')');
+      });
+    });
+    lines.push('Last care plan document generated: ' + latestDoc.doc_type + ' version, ' + (daysAgo === 0 ? 'today' : daysAgo + ' day(s) ago') + ', ' + latestDoc.total_items + ' total items across: ' + categoryCounts.join(', ') +
+      '. Included: ' + [latestDoc.content.includesAppointments && 'appointments', latestDoc.content.includesMeds && 'medication guide', latestDoc.content.includesNutrition && 'nutrition plan'].filter(Boolean).join(', '));
+  } else {
+    lines.push('No care plan document has been generated for this patient yet.');
   }
 
   // 14-day trend so the assistant can answer "why did X change" without guessing
@@ -3014,12 +3044,13 @@ async function aiAssistSend() {
   loadingDiv.textContent = 'Thinking…';
   if (el) { el.appendChild(loadingDiv); el.scrollTop = el.scrollHeight; }
 
+  const contextText = await buildAiAssistContext(pid);
   const systemPrompt = 'You are a clinical decision-support assistant embedded in a Remote Patient Monitoring platform, helping a nurse or physician quickly understand a patient\'s current status. ' +
     'Answer concisely and practically — this is for a working clinician mid-shift, not a lecture. ' +
     'Ground every answer in the specific data below; never invent vitals or values that aren\'t provided. ' +
     'You are decision support only — never state a diagnosis or treatment decision as settled fact; the treating clinician retains full authority. ' +
     'If asked something unrelated to this patient or to clinical workflows, redirect politely.\n\n' +
-    buildAiAssistContext(pid);
+    contextText;
 
   try {
     const resp = await fetch('/api/ai-assistant', {
@@ -3462,6 +3493,39 @@ function svGetClient() {
   if (typeof supabase === 'undefined') return null; // library failed to load — caller falls back to local/seeded data only
   _svClient = supabase.createClient(SV_SUPABASE_URL, SV_SUPABASE_KEY);
   return _svClient;
+}
+
+// Saves a structured snapshot of a generated care plan document (what was
+// actually included, not the PDF binary) so it can be looked up later —
+// by a nurse checking what a patient was given, or by the AI assistant.
+async function saveCarePlanDocument(pid, docType, byCategory, meta, totalItems) {
+  const sb = svGetClient();
+  if (!sb || !pid) { console.warn('[SyncVitals] care plan document not saved — client or patient unavailable'); return; }
+  try {
+    const { error } = await sb.from('care_plan_documents').insert({
+      patient_id: pid,
+      doc_type: docType,
+      generated_by: (svPatients.find(function (x) { return x.id === pid; }) || {}).nurse || null,
+      total_items: totalItems,
+      content: Object.assign({ byCategory: byCategory }, meta)
+    });
+    if (error) console.error('[SyncVitals] care plan document save failed —', error.message || error);
+    else console.log('[SyncVitals] care plan document saved OK');
+  } catch (e) { console.error('[SyncVitals] care plan document save threw an exception:', e); }
+}
+
+// Fetches the most recent generated document for a patient (either type),
+// used by the AI assistant to know what was actually given to the patient.
+async function getLatestCarePlanDocument(pid) {
+  const sb = svGetClient();
+  if (!sb || !pid) return null;
+  try {
+    const { data, error } = await sb.from('care_plan_documents')
+      .select('*').eq('patient_id', pid)
+      .order('generated_at', { ascending: false }).limit(1);
+    if (error || !data || !data.length) return null;
+    return data[0];
+  } catch (e) { console.error('[SyncVitals] fetching latest care plan document threw an exception:', e); return null; }
 }
 
 function svApplyNutritionRow(row) {
