@@ -381,7 +381,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 </style>
 <script src="supabase-client.js"></script>
 <script src="lightweight-charts.js"></script>
-<script src="data-engine.js?v=1789331920"></script>
+<script src="data-engine.js?v=1789333635"></script>
 </head>
 <body>
 
@@ -7912,17 +7912,18 @@ function svTab(el,name){
   const parent=bar.parentElement;
   parent.querySelectorAll('.sv-tc').forEach(t=>t.classList.remove('active'));
   document.getElementById(name).classList.add('active');
-  // The top Vitals Trend card, stat grid, and escalation box are always
-  // visible above the tabs, but Vitals Compare has its own Vitals section
-  // and legend covering the same ground — showing both leaves a redundant
-  // blank-feeling gap. Hide all three specifically on this tab.
+  // The top Vitals Trend card, stat grid, and escalation box are only
+  // useful on the landing tab (Risk flags) — a quick-glance summary before
+  // deciding what to do next. Every other tab is a deliberate destination
+  // (Care Plan, Nutrition, Compare, etc.) and should get full space for
+  // its own content instead of a redundant chart eating room at the top.
   const trendCard = document.getElementById('np-trend-card');
   const statGrid = document.querySelector('.sv-stat-grid');
   const escBox = document.getElementById('np-esc-box');
-  const hideOnCompare = (name === 'nt-compare') ? 'none' : '';
-  if (trendCard) trendCard.style.display = hideOnCompare;
-  if (statGrid) statGrid.style.display = hideOnCompare;
-  if (escBox) escBox.style.display = hideOnCompare;
+  const showOnLanding = (name === 'nt-risk') ? '' : 'none';
+  if (trendCard) trendCard.style.display = showOnLanding;
+  if (statGrid) statGrid.style.display = showOnLanding;
+  if (escBox) escBox.style.display = showOnLanding;
 
   if (name === 'nt-nutrition') {
     const pid = activePatientId || _nutrCurrentPid;
