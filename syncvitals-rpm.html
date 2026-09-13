@@ -381,7 +381,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 </style>
 <script src="supabase-client.js"></script>
 <script src="lightweight-charts.js"></script>
-<script src="data-engine.js?v=1789333635"></script>
+<script src="data-engine.js?v=1789334481"></script>
 </head>
 <body>
 
@@ -3133,6 +3133,7 @@ async function aiAssistSend() {
     'Answer concisely and practically — this is for a working clinician mid-shift, not a lecture. ' +
     'Ground every answer in the specific data below; never invent vitals or values that aren\'t provided. ' +
     'You are decision support only — never state a diagnosis or treatment decision as settled fact; the treating clinician retains full authority. ' +
+    'If asked something like "how should this patient be treated" or "what\'s the best approach for their condition" — that\'s not a request for general medical education, and the platform already has a specific place for it: the 30/60/90 tab contains evidence-sourced (AHA/NANDA/KDIGO) intervention guidance built specifically for this patient\'s conditions and current phase. Point the nurse there for the actual treatment/intervention content, in addition to whatever patient-specific data analysis you provide. ' +
     'If asked something unrelated to this patient or to clinical workflows, redirect politely.\n\n' +
     contextText;
 
