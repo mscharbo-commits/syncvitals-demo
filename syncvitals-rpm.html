@@ -381,7 +381,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 </style>
 <script src="supabase-client.js"></script>
 <script src="lightweight-charts.js"></script>
-<script src="data-engine.js?v=1789316929"></script>
+<script src="data-engine.js?v=1789317150"></script>
 </head>
 <body>
 
@@ -1918,6 +1918,7 @@ function toggleCpItem(el) {
   if (txt) txt.classList.toggle('done');
 
   const key = row ? (row.getAttribute('data-key') || '') : '';
+  console.log('[CarePlan] toggleCpItem clicked, key=', key, 'now checked=', el.classList.contains('chk'));
 
   // Save to active patient object immediately
   const p = svPatients.find(x => x.id === activePatientId);
@@ -1928,6 +1929,9 @@ function toggleCpItem(el) {
     else p.checkedItems.delete(key);
     // Full snapshot to catch any edge cases
     snapshotCarePlanState(p);
+    console.log('[CarePlan] after snapshot, p.checkedItems=', Array.from(p.checkedItems));
+  } else {
+    console.warn('[CarePlan] toggleCpItem could not save — p found?', !!p, 'key?', key, 'activePatientId=', activePatientId);
   }
 }
 
@@ -6024,6 +6028,7 @@ function buildDBCarePlan(p) {
 
 // ── RENDER DB CARE PLAN INTO THE 30/60/90 TAB ──
 function renderDBCarePlan(p) {
+  console.log('[CarePlan] renderDBCarePlan called for', p && p.id, new Error().stack.split('\n').slice(1,4).join(' <- '));
   const plan = buildDBCarePlan(p);
   const phase = plan.phase;
   const al = plan.alertLevel;
