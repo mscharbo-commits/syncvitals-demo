@@ -381,7 +381,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 </style>
 <script src="supabase-client.js"></script>
 <script src="lightweight-charts.js"></script>
-<script src="data-engine.js?v=1789314833"></script>
+<script src="data-engine.js?v=1789315622"></script>
 </head>
 <body>
 
@@ -2997,10 +2997,23 @@ async function buildAiAssistContext(pid) {
         categoryCounts.push(cat + ' (' + byCat[phase][cat].length + ' items, Day ' + phase + ')');
       });
     });
-    lines.push('Last care plan document generated: ' + latestDoc.doc_type + ' version, ' + (daysAgo === 0 ? 'today' : daysAgo + ' day(s) ago') + ', ' + latestDoc.total_items + ' total items across: ' + categoryCounts.join(', ') +
+    lines.push('Last PDF/document EXPORT of this care plan: ' + latestDoc.doc_type + ' version, ' + (daysAgo === 0 ? 'today' : daysAgo + ' day(s) ago') + ', ' + latestDoc.total_items + ' total items across: ' + categoryCounts.join(', ') +
       '. Included: ' + [latestDoc.content.includesAppointments && 'appointments', latestDoc.content.includesMeds && 'medication guide', latestDoc.content.includesNutrition && 'nutrition plan'].filter(Boolean).join(', '));
   } else {
-    lines.push('No care plan document has been generated for this patient yet.');
+    lines.push('No PDF/document has ever been EXPORTED for this patient\'s care plan — this is purely about document export history and does NOT mean the patient lacks an active care plan; check the phase/promotion status below, which is always current regardless of export history.');
+  }
+
+  // Phase promotion status — the SAME live criteria evaluation shown in the
+  // 30/60/90 tab's UI, independent of whether a PDF has ever been exported.
+  // This is the authoritative source for "is this patient on track to
+  // advance," not document-export history.
+  const promo = evaluatePromotion(p);
+  if (promo) {
+    lines.push('Current care plan phase: Day ' + promo.current + '. Phase promotion status (' + promo.current + ' \u2192 ' + promo.next + '): ' + promo.readyCount + '/' + promo.totalCriteria + ' criteria met \u2014 ' + (promo.ready ? 'READY to advance' : 'NOT yet ready to advance') + '.');
+    if (promo.reasons.length) lines.push('Criteria currently met: ' + promo.reasons.join(' | '));
+    if (promo.blockers.length) lines.push('Criteria NOT met (blocking advancement): ' + promo.blockers.join(' | '));
+  } else {
+    lines.push('Patient is already at the final care plan phase (Day 90) or has no phase data on file.');
   }
 
   // 14-day trend so the assistant can answer "why did X change" without guessing
