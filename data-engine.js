@@ -557,11 +557,27 @@
     saveState(state);
   }
 
+  // Regenerates ONE patient's vitals history from scratch (fresh backfill,
+  // re-applies the post-intervention stabilization). Does not touch
+  // nutrition or activity data at all — those live in Supabase/localStorage
+  // under a completely separate key schema, keyed by patient+date, so a
+  // vitals-history reset can't affect or lose them.
+  function reseedPatientHistory(id) {
+    const state = loadState();
+    const p = state.patients[id];
+    if (!p) return false;
+    backfillHistory(p);
+    saveState(state);
+    broadcast(state);
+    return true;
+  }
+
   window.SVEngine = {
     loadState: loadState,
     tick: tick,
     setDerived: setDerived,
     setNutritionSignal: setNutritionSignal,
+    reseedPatientHistory: reseedPatientHistory,
     computeNEWS2: computeNEWS2,
     scoreVitals: scoreVitals,
     start: start,
