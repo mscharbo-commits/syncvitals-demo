@@ -381,7 +381,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 </style>
 <script src="supabase-client.js"></script>
 <script src="lightweight-charts.js"></script>
-<script src="data-engine.js?v=1789354163"></script>
+<script src="data-engine.js?v=1789354648"></script>
 </head>
 <body>
 
@@ -4959,6 +4959,7 @@ function buildCompareData(p, days) {
     rows.push({
       dateStr: dateStr, ts: d.getTime(),
       sbp: v.sbp, dbp: v.dbp, hr: v.hr, spo2: v.spo2, weight: v.weight, bloodGlucose: v.glucose,
+      riskScore: v.riskScore,
       calories: totals.calories || null, sodium: totals.sodium || null,
       dietPotassium: totals.potassium || null, protein: totals.protein || null,
       carbs: totals.carbs || null, sugar: totals.sugar || null, fat: totals.fat || null,
@@ -5015,6 +5016,7 @@ function ensureGroupChart(groupKey, containerId, p, metrics, withMainBP) {
   });
   let paneIndex = 0;
   if (withMainBP) {
+    state.chart.priceScale('left').applyOptions({ visible: true, borderVisible: false });
     state.sbp = state.chart.addSeries(LightweightCharts.AreaSeries, {
       lineColor: '#185FA5', topColor: 'rgba(24,95,165,0.28)', bottomColor: 'rgba(24,95,165,0.02)',
       lineWidth: 2, priceLineVisible: false, lastValueVisible: false, title: 'Systolic (mmHg)'
@@ -5022,6 +5024,14 @@ function ensureGroupChart(groupKey, containerId, p, metrics, withMainBP) {
     state.dbp = state.chart.addSeries(LightweightCharts.LineSeries, {
       color: '#A8C8EC', lineWidth: 1, lineStyle: LightweightCharts.LineStyle.Dashed,
       priceLineVisible: false, lastValueVisible: false, title: 'Diastolic (mmHg)'
+    }, 0);
+    // Risk score shares the BP pane instead of getting its own — a
+    // separate left-axis scale (0-100) keeps it visually distinct from BP
+    // (90-210 range) without adding any extra chart height.
+    state.riskScore = state.chart.addSeries(LightweightCharts.LineSeries, {
+      color: '#8B5CF6', lineWidth: 2, lineStyle: LightweightCharts.LineStyle.Dotted,
+      priceLineVisible: false, lastValueVisible: false, title: 'Risk Score',
+      priceScaleId: 'left'
     }, 0);
     paneIndex = 1;
   }
@@ -5084,6 +5094,7 @@ function renderCompareLegend(row) {
   }
   const bpBreached = isBreached('sbp', r.sbp, goals) || isBreached('dbp', r.dbp, goals);
   const bpChip = chip('#185FA5', 'BP', (r.sbp != null ? r.sbp : '\u2014') + '/' + (r.dbp != null ? r.dbp : '\u2014') + ' mmHg', bpBreached);
+  const riskChip = r.riskScore != null ? chip('#8B5CF6', 'Risk Score', r.riskScore + '/100', r.riskScore >= 65) : '';
   function groupChips(metrics) {
     return metrics.map(function (m) {
       const val = r[m.key];
@@ -5091,7 +5102,7 @@ function renderCompareLegend(row) {
     }).join('');
   }
   const html = [
-    row_('Vitals', bpChip + groupChips(_compareCurrentMetrics.vitals)),
+    row_('Vitals', bpChip + riskChip + groupChips(_compareCurrentMetrics.vitals)),
     row_('Nutrition', groupChips(_compareCurrentMetrics.nutrition)),
     row_('Activity', groupChips(_compareCurrentMetrics.activity)),
   ].join('') + (row ? '<div style="font-size:10px;color:#aaa;margin-top:2px">' + new Date(row.ts).toLocaleDateString('en-US', { weekday:'short', month: 'short', day: 'numeric' }) + '</div>' : '');
@@ -5134,6 +5145,7 @@ function renderVitalsCompare(pid) {
     if (g === 'vitals') {
       state.sbp.setData(data.filter(function (r) { return r.sbp != null; }).map(function (r) { return { time: r.dateStr, value: r.sbp }; }));
       state.dbp.setData(data.filter(function (r) { return r.dbp != null; }).map(function (r) { return { time: r.dateStr, value: r.dbp }; }));
+      if (state.riskScore) state.riskScore.setData(data.filter(function (r) { return r.riskScore != null; }).map(function (r) { return { time: r.dateStr, value: r.riskScore }; }));
     }
     metrics[g].forEach(function (m) {
       const series = state.panes[m.key];
