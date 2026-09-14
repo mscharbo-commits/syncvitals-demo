@@ -381,7 +381,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 </style>
 <script src="supabase-client.js"></script>
 <script src="lightweight-charts.js"></script>
-<script src="data-engine.js?v=1789334481"></script>
+<script src="data-engine.js?v=1789350278"></script>
 </head>
 <body>
 
@@ -3011,12 +3011,20 @@ async function buildAiAssistContext(pid) {
   const latest = data[data.length - 1] || {};
   const goals = nutrGetGoalsForPid(pid);
 
+  // Exact timestamp of the most recent raw vitals reading (not just "today")
+  // — this patient's vitals may be updating live/frequently, so the AI's
+  // answer is only accurate as of this instant, not necessarily what a
+  // continuously-updating chart shows moments later.
+  const rawHistory = p.vitalHistory || [];
+  const mostRecentRaw = rawHistory.length ? rawHistory[rawHistory.length - 1] : null;
+  const asOfStr = mostRecentRaw ? new Date(mostRecentRaw.ts).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : 'unknown';
+
   const lines = [
     'Patient: ' + p.name + ' (age ' + (p.age || '—') + ')',
     'Conditions: ' + (p.conditions || []).join(', '),
     'Current composite risk score: ' + (p.riskScore != null ? p.riskScore + '/100' : 'not yet assessed'),
     'Alert level: ' + (p.alertLevel || 'unknown'),
-    'Most recent vitals: BP ' + (latest.sbp != null ? latest.sbp + '/' + latest.dbp : '—') + ' mmHg, HR ' + (latest.hr ?? '—') + ' bpm, SpO2 ' + (latest.spo2 ?? '—') + '%' +
+    'Most recent vitals (as of ' + asOfStr + ' — this patient\'s vitals may update again shortly after this snapshot, so if the nurse reports a different current value, trust theirs over this one): BP ' + (latest.sbp != null ? latest.sbp + '/' + latest.dbp : '—') + ' mmHg, HR ' + (latest.hr ?? '—') + ' bpm, SpO2 ' + (latest.spo2 ?? '—') + '%' +
       (latest.weight != null ? ', Weight ' + latest.weight + ' lbs' : '') +
       (latest.bloodGlucose != null ? ', Glucose ' + latest.bloodGlucose + ' mg/dL' : ''),
     'Most recent nutrition (today): Sodium ' + (latest.sodium ?? '—') + 'mg (goal <' + goals.sodium + '), Calories ' + (latest.calories ?? '—') + ' (goal ' + goals.calories + '), Potassium ' + (latest.dietPotassium ?? '—') + 'mg',
@@ -3134,6 +3142,7 @@ async function aiAssistSend() {
     'Ground every answer in the specific data below; never invent vitals or values that aren\'t provided. ' +
     'You are decision support only — never state a diagnosis or treatment decision as settled fact; the treating clinician retains full authority. ' +
     'If asked something like "how should this patient be treated" or "what\'s the best approach for their condition" — that\'s not a request for general medical education, and the platform already has a specific place for it: the 30/60/90 tab contains evidence-sourced (AHA/NANDA/KDIGO) intervention guidance built specifically for this patient\'s conditions and current phase. Point the nurse there for the actual treatment/intervention content, in addition to whatever patient-specific data analysis you provide. ' +
+    'This patient\'s vitals may be actively monitored and updating frequently. If the nurse reports seeing a different current value than what\'s in your data below, don\'t insist your snapshot is correct — acknowledge that live readings can shift between when your data was pulled and when they\'re looking at their screen, and treat what they\'re reporting as the more current figure. ' +
     'If asked something unrelated to this patient or to clinical workflows, redirect politely.\n\n' +
     contextText;
 
