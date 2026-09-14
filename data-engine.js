@@ -289,10 +289,23 @@
     p.severity = clamp((p.severity || 0) + (p.deteriorating ? 0.006 : -0.02), 0, cap);
     const sev = p.severity;
 
+    // Sodium intake and BP are two independently-random processes by
+    // default, which can produce clinically incoherent demo data (sodium
+    // spikes on the same day BP is falling). For sodium-sensitive
+    // conditions, nudge the BP target with how far today's logged sodium
+    // is over/under goal — set externally via setNutritionSignal(), since
+    // the food-log data itself lives outside this module. Bounded modestly
+    // so it influences the trend without overpowering the severity-driven
+    // narrative.
+    const sodiumSensitive = (p.conditions || []).some(function (c) { return c === 'HTN' || c === 'CHF' || c === 'CKD'; });
+    const sodiumRatio = sodiumSensitive ? (p.nutritionSignal && p.nutritionSignal.sodiumOverGoalRatio) || 0 : 0;
+    const sodiumBpNudge = clamp(sodiumRatio, -1, 2) * 6; // up to ~+12 mmHg when badly over goal, ~-6 when well under
+
     const revert = 0.25; // fraction of the gap to target closed each tick
     function step(key, worstDelta, noise, min, max, round) {
       if (v[key] == null) return;
-      const target = (b[key] != null ? b[key] : v[key]) + worstDelta * sev;
+      const nudge = (key === 'sbp' || key === 'dbp') ? sodiumBpNudge * (key === 'dbp' ? 0.5 : 1) : 0;
+      const target = (b[key] != null ? b[key] : v[key]) + worstDelta * sev + nudge;
       let nv = v[key] + revert * (target - v[key]) + (Math.random() - 0.5) * 2 * noise;
       nv = clamp(nv, min, max);
       v[key] = round ? Math.round(nv) : round1(nv);
@@ -532,10 +545,23 @@
   function start() { if (timer) return; timer = setInterval(tick, TICK_MS); }
   function stop() { clearInterval(timer); timer = null; }
 
+  // Called every tick from the portal (which has access to food-log data
+  // this module doesn't) with how far today's logged sodium is over/under
+  // goal, so the BP simulation can react to it instead of running as a
+  // fully independent random process. ratio > 0 means over goal.
+  function setNutritionSignal(id, sodiumOverGoalRatio) {
+    const state = loadState();
+    const p = state.patients[id];
+    if (!p) return;
+    p.nutritionSignal = { sodiumOverGoalRatio: sodiumOverGoalRatio, updatedAt: Date.now() };
+    saveState(state);
+  }
+
   window.SVEngine = {
     loadState: loadState,
     tick: tick,
     setDerived: setDerived,
+    setNutritionSignal: setNutritionSignal,
     computeNEWS2: computeNEWS2,
     scoreVitals: scoreVitals,
     start: start,
