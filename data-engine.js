@@ -345,9 +345,9 @@
     const lastEntry = p.history[p.history.length - 1];
     const lastKey = lastEntry ? new Date(lastEntry.ts).toISOString().slice(0, 10) : null;
     if (lastKey === todayKey) {
-      p.history[p.history.length - 1] = Object.assign({ ts: Date.now() }, v);
+      p.history[p.history.length - 1] = Object.assign({ ts: Date.now(), riskScore: p.riskScore }, v);
     } else {
-      p.history.push(Object.assign({ ts: Date.now() }, v));
+      p.history.push(Object.assign({ ts: Date.now(), riskScore: p.riskScore }, v));
     }
     if (p.history.length > 60) p.history.shift(); // now a 60-DAY safety cap, not a tick cap
   }
