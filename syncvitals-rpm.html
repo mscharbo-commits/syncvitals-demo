@@ -381,7 +381,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 </style>
 <script src="supabase-client.js"></script>
 <script src="lightweight-charts.js"></script>
-<script src="data-engine.js?v=1789398412"></script>
+<script src="data-engine.js?v=1789398994"></script>
 </head>
 <body>
 
@@ -3761,7 +3761,7 @@ function svSyncFromEngine(state) {
   if (typeof renderRegistry === 'function' && document.getElementById('s-nurse-queue')) renderRegistry();
   if (typeof activePatientId !== 'undefined' && activePatientId) {
     const active = svPatients.find(function (x) { return x.id === activePatientId; });
-    if (active && typeof renderPatientContext === 'function') renderPatientContext(active);
+    if (active && typeof renderPatientContext === 'function') renderPatientContext(active, false);
   }
 }
 window.addEventListener('sv:update', function (e) { svSyncFromEngine(e.detail); });
@@ -4354,7 +4354,8 @@ function restoreCarePlanState(p) {
 }
 
 // ── RENDER ALL PATIENT CONTEXT INTO NURSE PATH & CARE PLAN SCREENS ──
-function renderPatientContext(p) {
+function renderPatientContext(p, fullRebuild) {
+  if (fullRebuild === undefined) fullRebuild = true; // default true - existing callers (opening a patient, promoting a phase) want the full rebuild
   if (!p) return;
   if (p && p.id) _nutrCurrentPid = p.id;
   const v = p.lastVitals || {};
@@ -4535,21 +4536,29 @@ function renderPatientContext(p) {
   renderPromoBanner(p);
 
   // ── DB-DRIVEN CARE PLAN ──
-  renderDBCarePlan(p);
+  // Only rebuild this on genuine navigation (opening a patient, promoting a
+  // phase, etc.) — NOT on every live tick. This section gets directly
+  // edited in place (AI Enrich adds citation badges and new items,
+  // checkboxes get toggled) and a full rebuild every ~8 seconds was wiping
+  // that work out from under the nurse, sometimes before they'd even
+  // finished reading it.
+  if (fullRebuild) {
+    renderDBCarePlan(p);
 
-  // ── RESTORE OR INITIALIZE CARE PLAN STATE ──
-  if (p.checkedItems && p.checkedItems.size > 0) {
-    // Patient has saved selections — restore exactly what was saved
-    // Do NOT run preSelectCarePlan (would override nurses choices)
-    restoreCarePlanState(p);
-  } else {
-    // First time opening this patient — run AI pre-selection as starting point
-    // preSelectCarePlan will snapshot its selections so they persist on next visit
-    preSelectCarePlan(p);
+    // ── RESTORE OR INITIALIZE CARE PLAN STATE ──
+    if (p.checkedItems && p.checkedItems.size > 0) {
+      // Patient has saved selections — restore exactly what was saved
+      // Do NOT run preSelectCarePlan (would override nurses choices)
+      restoreCarePlanState(p);
+    } else {
+      // First time opening this patient — run AI pre-selection as starting point
+      // preSelectCarePlan will snapshot its selections so they persist on next visit
+      preSelectCarePlan(p);
+    }
+
+    // Clear AI enrich cache when patient changes
+    aiEnrichCache = {};
   }
-
-  // Clear AI enrich cache when patient changes
-  aiEnrichCache = {};
 
   // Store for PDF
   window._activePtName = p.name;
@@ -8234,8 +8243,8 @@ svTab = function(el, name) {
 
 // Hook renderPatientContext to inject pred panel at top of risk flags
 var _origRPC = renderPatientContext;
-renderPatientContext = function(p) {
-  _origRPC(p);
+renderPatientContext = function(p, fullRebuild) {
+  _origRPC(p, fullRebuild);
   var rc = document.getElementById('nt-risk-content');
   if (rc) {
     var panel = document.getElementById('pred-scores-panel');
