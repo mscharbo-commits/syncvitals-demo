@@ -381,7 +381,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 </style>
 <script src="supabase-client.js"></script>
 <script src="lightweight-charts.js"></script>
-<script src="data-engine.js?v=1789350278"></script>
+<script src="data-engine.js?v=1789351823"></script>
 </head>
 <body>
 
@@ -8230,6 +8230,18 @@ window.addEventListener('sv:update', function() {
   if (panel) renderPredScores(p);
   var aiTab = document.getElementById('nt-ai');
   if (aiTab && aiTab.classList.contains('active')) renderAdmissionsTab(p);
+  // The main Vitals Trend chart used to only render once, when a patient
+  // was first opened, or when the date-range buttons were clicked — never
+  // on the periodic live tick. That let it silently freeze at whatever data
+  // existed at open time while Vitals Compare (which re-fetches fresh on
+  // every view) kept moving, so the two showed different numbers for the
+  // same patient. Refresh it here too, whenever it's actually visible.
+  var trendCard = document.getElementById('np-trend-card');
+  if (trendCard && trendCard.style.display !== 'none') renderTrendChart(p);
+  var compareTab = document.getElementById('nt-compare');
+  if (compareTab && compareTab.classList.contains('active')) renderVitalsCompare(p.id);
+  var apptsTab = document.getElementById('nt-appts');
+  if (apptsTab && apptsTab.classList.contains('active')) renderAppointments(p.id);
 });
 
 // Fallback poll in case the engine script hasn't loaded yet
