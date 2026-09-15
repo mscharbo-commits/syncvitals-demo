@@ -381,7 +381,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 </style>
 <script src="supabase-client.js"></script>
 <script src="lightweight-charts.js"></script>
-<script src="data-engine.js?v=1789482886"></script>
+<script src="data-engine.js?v=1789483266"></script>
 </head>
 <body>
 
@@ -516,6 +516,19 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
       <div style="font-size:13px;color:#888" id="np-meta-line">68 y/o · HTN, CKD · Nurse R. Santos</div>
       <button onclick="openVitalsForm(activePatientId)" style="background:var(--sv-navy);border:none;border-radius:6px;color:#fff;font-size:11px;font-weight:600;padding:5px 12px;cursor:pointer;white-space:nowrap">📊 Log Vitals</button>
     </div>
+<div class="sv-tab-bar">
+      <div class="sv-tab active" onclick="svTab(this,'nt-risk')">Risk flags</div>
+      <div class="sv-tab" onclick="svTab(this,'nt-actions')">Actions</div>
+      <div class="sv-tab" onclick="svTab(this,'nt-careplan')">Care plan</div>
+      <div class="sv-tab" onclick="svTab(this,'nt-9090')">30/60/90</div>
+      <div class="sv-tab" onclick="svTab(this,'nt-ai')">🏥 Admissions</div>
+      <div class="sv-tab" onclick="svTab(this,'nt-nutrition')">🥗 Nutrition <span id="nutr-tab-badge" style="display:none;background:#E24B4A;color:#fff;font-size:9px;font-weight:700;padding:1px 5px;border-radius:10px;margin-left:3px;vertical-align:middle"></span></div>
+      <div class="sv-tab" onclick="svTab(this,'nt-meds')">💊 Medications</div>
+      <div class="sv-tab" onclick="svTab(this,'nt-compare')">📊 Vitals Compare</div>
+      <div class="sv-tab" onclick="svTab(this,'nt-appts')">📅 Appointments</div>
+      <div class="sv-tab" onclick="svTab(this,'nt-patientpdf')">📄 Patient PDF</div>
+      <div class="sv-tab" onclick="svTab(this,'nt-doc')">Document</div>
+    </div>
     <div class="sv-stat-grid">
       <div class="sv-stat"><div class="sv-stat-label">Current BP</div><div class="sv-stat-val danger" id="np-bp-stat">172/98</div></div>
       <div class="sv-stat"><div class="sv-stat-label">Threshold</div><div class="sv-stat-val">160</div></div>
@@ -537,19 +550,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     </div>
     <div id="np-esc-box"><div class="sv-esc-box esc-now"><div class="esc-label">Escalate now — physician call recommended</div><div class="esc-text">Stage 2 reading with 3-week upward trend and CKD comorbidity. Recheck within 2 hours.</div></div></div>
     <div style="display:flex;justify-content:flex-end;padding:6px 16px 0;gap:6px;background:#fff;border-bottom:0.5px solid var(--sv-border)"><button onclick="openDBBrowser()" style="background:var(--sv-lightest);border:0.5px solid var(--sv-border);border-radius:6px;padding:5px 12px;font-size:12px;font-weight:600;color:var(--sv-navy-mid);cursor:pointer">📚 Care Plan DB</button><button id="ai-enrich-btn" onclick="openAIEnrich(30)" style="background:linear-gradient(135deg,#0D2E6E,#185FA5);border:none;border-radius:6px;padding:5px 12px;font-size:12px;font-weight:600;color:#fff;cursor:pointer;transition:all 0.2s">✨ AI Enrich</button></div>
-<div class="sv-tab-bar">
-      <div class="sv-tab active" onclick="svTab(this,'nt-risk')">Risk flags</div>
-      <div class="sv-tab" onclick="svTab(this,'nt-actions')">Actions</div>
-      <div class="sv-tab" onclick="svTab(this,'nt-careplan')">Care plan</div>
-      <div class="sv-tab" onclick="svTab(this,'nt-9090')">30/60/90</div>
-      <div class="sv-tab" onclick="svTab(this,'nt-ai')">🏥 Admissions</div>
-      <div class="sv-tab" onclick="svTab(this,'nt-nutrition')">🥗 Nutrition <span id="nutr-tab-badge" style="display:none;background:#E24B4A;color:#fff;font-size:9px;font-weight:700;padding:1px 5px;border-radius:10px;margin-left:3px;vertical-align:middle"></span></div>
-      <div class="sv-tab" onclick="svTab(this,'nt-meds')">💊 Medications</div>
-      <div class="sv-tab" onclick="svTab(this,'nt-compare')">📊 Vitals Compare</div>
-      <div class="sv-tab" onclick="svTab(this,'nt-appts')">📅 Appointments</div>
-      <div class="sv-tab" onclick="svTab(this,'nt-patientpdf')">📄 Patient PDF</div>
-      <div class="sv-tab" onclick="svTab(this,'nt-doc')">Document</div>
-    </div>
 
     <div id="nt-risk" class="sv-tc active">
       <div id="nt-risk-content">
