@@ -178,7 +178,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
 .btn-secondary { background:rgba(13,46,110,0.08); color:var(--navy); }
 .btn-secondary:hover { background:rgba(13,46,110,0.15); }
 </style>
-<script src="data-engine.js?v=1789447034"></script>
+<script src="data-engine.js?v=1789447861"></script>
 <script src="supabase-client.js"></script>
 </head>
 <body>
@@ -941,10 +941,34 @@ async function loadMedicationAlerts() {
 setInterval(loadMedicationAlerts, 30000);
 document.addEventListener('DOMContentLoaded', () => { setTimeout(loadMedicationAlerts, 1000); });
 
-// Poll nutrition alerts every 30s
-// NOTE: loadNutritionAlerts is referenced here but was never actually
-// defined anywhere in this file — pre-existing, out of scope for this
-// change. Left as-is rather than silently "fixed" as a side effect.
+// ── NUTRITION ALERTS ──
+// Was previously a broken reference (loadNutritionAlerts was called every
+// 30s but never defined anywhere in this file, throwing on every page
+// load). Now genuinely implemented, Supabase-backed to match, so alerts
+// generated on the patient's device (sodium/potassium/sugar/calorie
+// limits exceeded) show up here regardless of which device the patient
+// used to log the meal that triggered them.
+const _nutrAlertIdsSeen = new Set();
+async function loadNutritionAlerts() {
+  const sb = svGetClient();
+  if (!sb) return;
+  try {
+    const { data, error } = await sb.from('nutrition_alerts').select('*').eq('read', false);
+    if (error) { console.error('[SyncVitals] nutrition alerts poll failed —', error.message || error); return; }
+    (data || []).forEach(function (a) {
+      if (_nutrAlertIdsSeen.has(a.id)) return;
+      _nutrAlertIdsSeen.add(a.id);
+      const p = PATIENTS.find(function (x) { return x.id === a.patient_id; });
+      alerts.unshift({
+        pid: a.patient_id, name: p ? p.name : a.patient_id,
+        sev: a.severity === 'high' ? 'crit' : a.severity === 'medium' ? 'warn' : 'warn',
+        msg: '🥗 ' + a.message,
+        ts: new Date(a.created_at).toLocaleTimeString()
+      });
+    });
+    if (typeof renderAlerts === 'function' && document.getElementById('tab-alerts')) renderAlerts();
+  } catch (e) { console.error('[SyncVitals] nutrition alerts poll threw an exception:', e); }
+}
 setInterval(loadNutritionAlerts, 30000);
 document.addEventListener('DOMContentLoaded', () => { setTimeout(loadNutritionAlerts, 1000); });
 

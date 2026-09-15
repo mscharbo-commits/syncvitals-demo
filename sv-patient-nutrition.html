@@ -253,7 +253,7 @@
   .tab-btn.active { background: var(--card); color: var(--navy); box-shadow: 0 1px 4px rgba(0,0,0,0.08); }
 </style>
 <script src="supabase-client.js"></script>
-<script src="data-engine.js?v=1789447034"></script>
+<script src="data-engine.js?v=1789447861"></script>
 </head>
 <body>
 
@@ -1746,7 +1746,7 @@ function checkAlerts(log) {
       value: totals.calories, limit: goals.calories });
   }
 
-  // Write alerts to localStorage where RPM can read them
+  // Write alerts to localStorage where RPM can read them (same-device, fast)
   if (alerts.length > 0) {
     const key = 'sv_nutr_alert_' + currentPid;
     let existing = [];
@@ -1761,6 +1761,21 @@ function checkAlerts(log) {
     // Keep last 50 alerts per patient
     existing = existing.slice(0, 50);
     localStorage.setItem(key, JSON.stringify(existing));
+
+    // Also write to Supabase so Command Dashboard (a different device/
+    // browser than the patient's) sees these alerts too — nutrition
+    // logging itself is already cross-device, alerts should match.
+    const sb = svGetClient();
+    if (sb) {
+      alerts.forEach(function (a) {
+        sb.from('nutrition_alerts').insert({
+          patient_id: currentPid, alert_type: a.type, severity: a.severity,
+          message: a.msg, value: a.value, limit_value: a.limit, log_date: currentDate
+        }).then(function (r) {
+          if (r.error) console.error('[SyncVitals] nutrition alert save failed:', r.error.message || r.error);
+        });
+      });
+    }
   }
 }
 
