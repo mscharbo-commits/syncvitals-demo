@@ -381,7 +381,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 </style>
 <script src="supabase-client.js"></script>
 <script src="lightweight-charts.js"></script>
-<script src="data-engine.js?v=1789398994"></script>
+<script src="data-engine.js?v=1789439631"></script>
 </head>
 <body>
 
@@ -512,7 +512,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
   <div class="sv-sub"><span class="sv-sub-title" id="np-header-name">Margaret Okafor · MRN 00482</span><span class="sv-badge sv-badge-stage2" id="np-header-badge" style="font-size:11px">Stage 2 HTN</span></div>
   <div class="sv-content">
     <button class="nav-back" onclick="showScreen('s-nurse-queue')">&#8592; Back to queue</button>
-    <div style="font-size:13px;color:#888;margin-bottom:12px" id="np-meta-line">68 y/o · HTN, CKD · Nurse R. Santos</div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+      <div style="font-size:13px;color:#888" id="np-meta-line">68 y/o · HTN, CKD · Nurse R. Santos</div>
+      <button onclick="openVitalsForm(activePatientId)" style="background:var(--sv-navy);border:none;border-radius:6px;color:#fff;font-size:11px;font-weight:600;padding:5px 12px;cursor:pointer;white-space:nowrap">📊 Log Vitals</button>
+    </div>
     <div class="sv-stat-grid">
       <div class="sv-stat"><div class="sv-stat-label">Current BP</div><div class="sv-stat-val danger" id="np-bp-stat">172/98</div></div>
       <div class="sv-stat"><div class="sv-stat-label">Threshold</div><div class="sv-stat-val">160</div></div>
