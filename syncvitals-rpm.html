@@ -381,7 +381,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 </style>
 <script src="supabase-client.js"></script>
 <script src="lightweight-charts.js"></script>
-<script src="data-engine.js?v=1789484296"></script>
+<script src="data-engine.js?v=1789485008"></script>
 </head>
 <body>
 
@@ -3828,12 +3828,12 @@ async function fetchMedConfirmationsRange(pid, days) {
 
 function computeAdherenceStats(schedule, confirmations, days) {
   const now = Date.now();
-  const perMed = {}; // schedule_id -> { name, dose, expected, taken, missed: [{date, time}] }
+  const perMed = {}; // schedule_id -> { name, dose, expected, taken, missed: [...], history: [...every dose...] }
   let totalExpected = 0, totalTaken = 0;
 
   schedule.forEach(function (med) {
     if (med.frequency === 'as-needed') return; // no fixed expectation to measure against
-    perMed[med.id] = { name: med.med_name, dose: med.dose, expected: 0, taken: 0, missed: [] };
+    perMed[med.id] = { name: med.med_name, dose: med.dose, expected: 0, taken: 0, missed: [], history: [] };
     const addedAt = new Date(med.created_at).getTime();
     const windowStart = Math.max(addedAt, now - days * 86400000);
     for (let d = 0; d < days; d++) {
@@ -3847,11 +3847,14 @@ function computeAdherenceStats(schedule, confirmations, days) {
         perMed[med.id].expected++;
         totalExpected++;
         const match = confirmations.find(function (c) { return c.schedule_id === med.id && c.scheduled_date === dateStr && c.scheduled_time === t; });
-        if (match && match.status === 'yes') { perMed[med.id].taken++; totalTaken++; }
-        else { perMed[med.id].missed.push({ date: dateStr, time: t, status: (match && match.status === 'no') ? 'declined' : 'unconfirmed' }); }
+        const status = (match && match.status === 'yes') ? 'taken' : (match && match.status === 'no') ? 'declined' : 'unconfirmed';
+        if (status === 'taken') { perMed[med.id].taken++; totalTaken++; }
+        else { perMed[med.id].missed.push({ date: dateStr, time: t, status: status }); }
+        perMed[med.id].history.push({ date: dateStr, time: t, status: status });
       });
     }
     perMed[med.id].missed.sort(function (a, b) { return b.date.localeCompare(a.date) || b.time.localeCompare(a.time); }); // most recent first
+    perMed[med.id].history.sort(function (a, b) { return b.date.localeCompare(a.date) || b.time.localeCompare(a.time); }); // most recent first
   });
 
   return {
@@ -3934,22 +3937,26 @@ async function renderMedAdherence(pid) {
     '<div style="font-size:32px;font-weight:800;color:' + pctColor(stats.overallPct) + '">' + stats.overallPct + '%</div>' +
     '<div style="font-size:12px;color:#888;margin-top:2px">Overall adherence — last ' + days + ' days (' + stats.totalTaken + ' of ' + stats.totalExpected + ' doses confirmed)</div>' +
     '</div>' +
-    '<div style="font-size:12px;font-weight:700;color:var(--sv-navy);margin-bottom:8px">By Medication — click a row to see when doses were missed</div>' +
+    '<div style="font-size:12px;font-weight:700;color:var(--sv-navy);margin-bottom:8px">By Medication — click a row to see the full dose history</div>' +
     stats.perMed.map(function (m, idx) {
       const rowId = 'missed-row-' + idx;
-      const missedListHtml = m.missed.length
-        ? m.missed.map(function (miss) {
-            const tag = miss.status === 'declined' ? '<span style="color:#E24B4A">✗ Declined</span>' : '<span style="color:#EF9F27">— No response</span>';
-            return '<div style="display:flex;justify-content:space-between;padding:5px 0;font-size:12px;border-bottom:1px solid #f0f0f0"><span>' + fmtMissedDate(miss.date) + ' · ' + fmtMissedTime(miss.time) + '</span>' + tag + '</div>';
+      const statusTag = function (status) {
+        if (status === 'taken') return '<span style="color:#1D9E75">✓ Taken</span>';
+        if (status === 'declined') return '<span style="color:#E24B4A">✗ Declined</span>';
+        return '<span style="color:#EF9F27">— No response</span>';
+      };
+      const historyListHtml = m.history.length
+        ? m.history.map(function (h) {
+            return '<div style="display:flex;justify-content:space-between;padding:5px 0;font-size:12px;border-bottom:1px solid #f0f0f0"><span>' + fmtMissedDate(h.date) + ' · ' + fmtMissedTime(h.time) + '</span>' + statusTag(h.status) + '</div>';
           }).join('')
-        : '<div style="font-size:12px;color:#888;padding:5px 0">No missed doses in this window.</div>';
+        : '<div style="font-size:12px;color:#888;padding:5px 0">No doses due yet in this window.</div>';
       return '<div style="border:1px solid var(--sv-border);border-radius:8px;margin-bottom:8px;overflow:hidden">' +
         '<div onclick="document.getElementById(\'' + rowId + '\').style.display = document.getElementById(\'' + rowId + '\').style.display===\'none\'?\'\':\'none\'" style="display:flex;justify-content:space-between;align-items:center;padding:10px 12px;cursor:pointer">' +
         '<div><div style="font-size:13px;font-weight:700;color:var(--sv-navy)">' + m.name + ' — ' + m.dose + '</div>' +
         '<div style="font-size:11px;color:#888;margin-top:2px">' + m.taken + ' of ' + m.expected + ' doses taken' + (m.missed.length ? ' · ' + m.missed.length + ' missed' : '') + '</div></div>' +
         '<div style="display:flex;align-items:center;gap:8px"><div style="font-size:16px;font-weight:800;color:' + pctColor(m.pct) + '">' + (m.pct == null ? '—' : m.pct + '%') + '</div><span style="color:#aaa;font-size:11px">▾</span></div>' +
         '</div>' +
-        '<div id="' + rowId + '" style="display:none;padding:0 12px 10px;background:#FAFBFC">' + missedListHtml + '</div>' +
+        '<div id="' + rowId + '" style="display:none;padding:0 12px 10px;max-height:280px;overflow-y:auto;background:#FAFBFC">' + historyListHtml + '</div>' +
         '</div>';
     }).join('');
 }
