@@ -253,7 +253,7 @@
   .tab-btn.active { background: var(--card); color: var(--navy); box-shadow: 0 1px 4px rgba(0,0,0,0.08); }
 </style>
 <script src="supabase-client.js"></script>
-<script src="data-engine.js?v=1789444828"></script>
+<script src="data-engine.js?v=1789445439"></script>
 </head>
 <body>
 
@@ -336,6 +336,9 @@
   <div id="page-profile" class="page-content" style="display:none">
     <!-- Profile content injected by JS -->
   </div>
+  <div id="page-meds" class="page-content" style="display:none">
+    <!-- Medication confirmation content injected by JS -->
+  </div>
 
   <!-- Bottom nav -->
   <div class="bottom-nav">
@@ -350,6 +353,10 @@
     <button class="nav-item" onclick="showPage('trends',this)">
       <div class="nav-icon">📊</div>
       <div class="nav-label">Trends</div>
+    </button>
+    <button class="nav-item" onclick="showPage('meds',this)">
+      <div class="nav-icon">💊</div>
+      <div class="nav-label">Meds</div>
     </button>
     <button class="nav-item" onclick="showPage('profile',this)">
       <div class="nav-icon">👤</div>
@@ -877,7 +884,7 @@ function launchApp(pid) {
 // PAGE NAVIGATION
 // ══════════════════════════════════════════════════
 function showPage(name, btn) {
-  ['diary','activity','trends','profile'].forEach(p => {
+  ['diary','activity','trends','profile','meds'].forEach(p => {
     document.getElementById('page-'+p).style.display = p === name ? '' : 'none';
   });
   document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
@@ -886,6 +893,7 @@ function showPage(name, btn) {
   if (name === 'activity') renderActivity();
   if (name === 'trends')   renderTrends();
   if (name === 'profile')  renderProfile();
+  if (name === 'meds')     renderMedsPage();
 }
 
 // ══════════════════════════════════════════════════
@@ -2267,6 +2275,122 @@ function renderProfile() {
     </div>
     <div style="height:8px"></div>
   `;
+}
+
+// ── MEDICATION CONFIRMATIONS ──
+// Reads the schedule a nurse set up (medication_schedules) and shows the
+// patient today's doses with a real Yes/No check-in at each scheduled
+// time — no pill box required. A missed or "No" response is what the
+// nurse-side alert (next phase) will key off of.
+async function fetchMedScheduleForPatient(pid) {
+  const sb = svGetClient();
+  if (!sb || !pid) return [];
+  try {
+    const { data, error } = await sb.from('medication_schedules')
+      .select('*').eq('patient_id', pid).eq('active', true);
+    if (error) { console.error('[SyncVitals] medication schedule fetch failed —', error.message || error); return []; }
+    return data || [];
+  } catch (e) { console.error('[SyncVitals] medication schedule fetch threw an exception:', e); return []; }
+}
+
+async function fetchTodaysConfirmations(pid, dateStr) {
+  const sb = svGetClient();
+  if (!sb || !pid) return [];
+  try {
+    const { data, error } = await sb.from('medication_confirmations')
+      .select('*').eq('patient_id', pid).eq('scheduled_date', dateStr);
+    if (error) { console.error('[SyncVitals] medication confirmations fetch failed —', error.message || error); return []; }
+    return data || [];
+  } catch (e) { console.error('[SyncVitals] medication confirmations fetch threw an exception:', e); return []; }
+}
+
+async function renderMedsPage() {
+  const el = document.getElementById('page-meds');
+  if (!el || !currentPid) return;
+  el.innerHTML = '<div style="padding:20px;text-align:center;color:#888;font-size:13px">Loading…</div>';
+
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const nowMinutes = new Date().getHours() * 60 + new Date().getMinutes();
+
+  const [schedule, confirmations] = await Promise.all([
+    fetchMedScheduleForPatient(currentPid),
+    fetchTodaysConfirmations(currentPid, todayStr)
+  ]);
+
+  if (!schedule.length) {
+    el.innerHTML = '<div style="padding:30px 20px;text-align:center;color:#aaa;font-size:13px">No medications have been scheduled for you yet. Your care team will set this up.</div>';
+    return;
+  }
+
+  // Build today's due instances: one row per (medication, scheduled time)
+  const rows = [];
+  schedule.forEach(function (med) {
+    if (med.frequency === 'as-needed') {
+      rows.push({ med: med, time: null, status: 'as-needed' });
+      return;
+    }
+    (med.times || []).forEach(function (t) {
+      const [hh, mm] = t.split(':').map(Number);
+      const timeMinutes = hh * 60 + (mm || 0);
+      const existing = confirmations.find(function (c) { return c.schedule_id === med.id && c.scheduled_time === t; });
+      let status;
+      if (existing) status = existing.status;
+      else if (timeMinutes <= nowMinutes) status = 'due';
+      else status = 'upcoming';
+      rows.push({ med: med, time: t, status: status });
+    });
+  });
+  rows.sort(function (a, b) { return (a.time || '99:99').localeCompare(b.time || '99:99'); });
+
+  const fmtTime = function (t) {
+    if (!t) return '';
+    const [hh, mm] = t.split(':').map(Number);
+    const period = hh >= 12 ? 'PM' : 'AM';
+    const h12 = hh % 12 === 0 ? 12 : hh % 12;
+    return h12 + ':' + String(mm).padStart(2, '0') + ' ' + period;
+  };
+
+  el.innerHTML = '<div style="padding:16px">' +
+    '<div style="font-size:16px;font-weight:700;color:var(--navy);margin-bottom:2px">Today\'s Medications</div>' +
+    '<div style="font-size:12px;color:#888;margin-bottom:16px">Let us know when you\'ve taken each dose.</div>' +
+    rows.map(function (r) {
+      const isDue = r.status === 'due';
+      const isYes = r.status === 'yes';
+      const isNo = r.status === 'no';
+      const isUpcoming = r.status === 'upcoming';
+      const isAsNeeded = r.status === 'as-needed';
+      let statusBadge = '';
+      if (isYes) statusBadge = '<span style="color:#1D9E75;font-weight:700;font-size:12px">✓ Taken</span>';
+      else if (isNo) statusBadge = '<span style="color:#E24B4A;font-weight:700;font-size:12px">✗ Not taken</span>';
+      else if (isUpcoming) statusBadge = '<span style="color:#aaa;font-size:12px">Upcoming</span>';
+
+      return '<div style="background:#fff;border:1px solid var(--border,#eee);border-radius:10px;padding:12px 14px;margin-bottom:8px;' + (isDue ? 'border-color:#EF9F27' : '') + '">' +
+        '<div style="display:flex;justify-content:space-between;align-items:center">' +
+        '<div><div style="font-size:14px;font-weight:700;color:var(--navy)">' + r.med.med_name + ' — ' + r.med.dose + '</div>' +
+        '<div style="font-size:12px;color:#888;margin-top:2px">' + (isAsNeeded ? 'As needed' : fmtTime(r.time)) + '</div></div>' +
+        statusBadge +
+        '</div>' +
+        ((isDue || isAsNeeded) ? '<div style="display:flex;gap:8px;margin-top:10px">' +
+          '<button data-schedule-id="' + r.med.id + '" data-time="' + (r.time || '') + '" onclick="confirmMedDose(this.dataset.scheduleId, this.dataset.time, \'yes\')" style="flex:1;background:#1D9E75;color:#fff;border:none;border-radius:8px;padding:8px;font-size:12px;font-weight:700;cursor:pointer">✓ Yes, I took it</button>' +
+          '<button data-schedule-id="' + r.med.id + '" data-time="' + (r.time || '') + '" onclick="confirmMedDose(this.dataset.scheduleId, this.dataset.time, \'no\')" style="flex:1;background:#f5f5f5;color:#888;border:none;border-radius:8px;padding:8px;font-size:12px;font-weight:700;cursor:pointer">Not yet</button>' +
+          '</div>' : '') +
+        '</div>';
+    }).join('') +
+    '</div>';
+}
+
+async function confirmMedDose(scheduleId, time, status) {
+  const sb = svGetClient();
+  if (!sb || !currentPid) return;
+  const todayStr = new Date().toISOString().slice(0, 10);
+  try {
+    const { error } = await sb.from('medication_confirmations').upsert({
+      patient_id: currentPid, schedule_id: scheduleId, scheduled_date: todayStr,
+      scheduled_time: time || 'as-needed', status: status, confirmed_at: new Date().toISOString(), confirmed_by: 'patient'
+    }, { onConflict: 'schedule_id,scheduled_date,scheduled_time' });
+    if (error) { console.error('[SyncVitals] medication confirmation save failed —', error.message || error); return; }
+    renderMedsPage();
+  } catch (e) { console.error('[SyncVitals] medication confirmation save threw an exception:', e); }
 }
 
 function signOut() {
