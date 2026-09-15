@@ -381,7 +381,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 </style>
 <script src="supabase-client.js"></script>
 <script src="lightweight-charts.js"></script>
-<script src="data-engine.js?v=1789482744"></script>
+<script src="data-engine.js?v=1789482886"></script>
 </head>
 <body>
 
@@ -1147,9 +1147,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     <div style="background:#F8FAFD;border:1px solid var(--sv-border);border-radius:10px;padding:14px;margin-bottom:16px">
       <div style="font-size:12px;font-weight:700;color:var(--sv-navy);margin-bottom:8px">+ Add Medication</div>
       <div style="display:grid;grid-template-columns:1.3fr 1fr;gap:8px;margin-bottom:8px">
-        <input id="med-name-input" list="med-name-suggestions" type="text" placeholder="Medication name (e.g. Lisinopril)" style="padding:8px 10px;border:1px solid var(--sv-border);border-radius:8px;font-size:13px">
+        <input id="med-name-input" list="med-name-suggestions" type="text" placeholder="Medication name (e.g. Lisinopril)" onkeydown="if(event.key==='Enter')addMedSchedule()" style="padding:8px 10px;border:1px solid var(--sv-border);border-radius:8px;font-size:13px">
         <datalist id="med-name-suggestions"></datalist>
-        <input id="med-dose-input" type="text" placeholder="Dose (e.g. 10mg)" style="padding:8px 10px;border:1px solid var(--sv-border);border-radius:8px;font-size:13px">
+        <input id="med-dose-input" type="text" placeholder="Dose (e.g. 10mg)" onkeydown="if(event.key==='Enter')addMedSchedule()" style="padding:8px 10px;border:1px solid var(--sv-border);border-radius:8px;font-size:13px">
       </div>
       <div style="display:grid;grid-template-columns:1fr 1.3fr;gap:8px;margin-bottom:10px">
         <select id="med-freq-input" style="padding:8px 10px;border:1px solid var(--sv-border);border-radius:8px;font-size:13px">
@@ -1159,7 +1159,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
           <option value="weekly">Weekly</option>
           <option value="as-needed">As needed</option>
         </select>
-        <input id="med-times-input" type="text" placeholder="Times (e.g. 08:00, 20:00)" style="padding:8px 10px;border:1px solid var(--sv-border);border-radius:8px;font-size:13px">
+        <input id="med-times-input" type="text" placeholder="Times (e.g. 08:00, 20:00)" onkeydown="if(event.key==='Enter')addMedSchedule()" style="padding:8px 10px;border:1px solid var(--sv-border);border-radius:8px;font-size:13px">
       </div>
       <button onclick="addMedSchedule()" style="background:var(--sv-navy);color:#fff;border:none;border-radius:8px;padding:8px 16px;font-size:12px;font-weight:600;cursor:pointer">Add to Schedule</button>
     </div>
