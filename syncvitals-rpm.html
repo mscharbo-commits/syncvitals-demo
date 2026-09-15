@@ -381,7 +381,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 </style>
 <script src="supabase-client.js"></script>
 <script src="lightweight-charts.js"></script>
-<script src="data-engine.js?v=1789447861"></script>
+<script src="data-engine.js?v=1789478557"></script>
 </head>
 <body>
 
@@ -1147,7 +1147,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     <div style="background:#F8FAFD;border:1px solid var(--sv-border);border-radius:10px;padding:14px;margin-bottom:16px">
       <div style="font-size:12px;font-weight:700;color:var(--sv-navy);margin-bottom:8px">+ Add Medication</div>
       <div style="display:grid;grid-template-columns:1.3fr 1fr;gap:8px;margin-bottom:8px">
-        <input id="med-name-input" type="text" placeholder="Medication name (e.g. Lisinopril)" style="padding:8px 10px;border:1px solid var(--sv-border);border-radius:8px;font-size:13px">
+        <input id="med-name-input" list="med-name-suggestions" type="text" placeholder="Medication name (e.g. Lisinopril)" style="padding:8px 10px;border:1px solid var(--sv-border);border-radius:8px;font-size:13px">
+        <datalist id="med-name-suggestions"></datalist>
         <input id="med-dose-input" type="text" placeholder="Dose (e.g. 10mg)" style="padding:8px 10px;border:1px solid var(--sv-border);border-radius:8px;font-size:13px">
       </div>
       <div style="display:grid;grid-template-columns:1fr 1.3fr;gap:8px;margin-bottom:10px">
@@ -3659,7 +3660,73 @@ async function fetchMedSchedule(pid) {
   } catch (e) { console.error('[SyncVitals] medication schedule fetch threw an exception:', e); return []; }
 }
 
-async function addMedSchedule() {
+let _pendingInteractionAdd = null; // stashes the form values while the warning modal is open
+
+function showDrugInteractionWarning(newName, hits) {
+  _pendingInteractionAdd = {
+    name: newName,
+    dose: (document.getElementById('med-dose-input').value || '').trim(),
+    freq: document.getElementById('med-freq-input').value,
+    times: (document.getElementById('med-times-input').value || '').split(',').map(t => t.trim()).filter(Boolean)
+  };
+  const body = document.getElementById('interaction-modal-body');
+  if (body) {
+    body.innerHTML = hits.map(function (h) {
+      const other = h.drug_a.toLowerCase() === newName.toLowerCase() ? h.drug_b : h.drug_a;
+      const isRed = h.severity === 'red';
+      return '<div style="background:' + (isRed ? '#FCEBEB' : '#FFF8E1') + ';border-left:3px solid ' + (isRed ? '#E24B4A' : '#EF9F27') + ';border-radius:0 8px 8px 0;padding:12px 14px;margin-bottom:10px">' +
+        '<div style="font-size:13px;font-weight:700;color:' + (isRed ? '#A32D2D' : '#7A5700') + ';margin-bottom:4px">' + newName + ' + ' + other + ' (' + (isRed ? 'Avoid' : 'Caution') + ')</div>' +
+        '<div style="font-size:12px;color:#555;margin-bottom:6px">' + h.mechanism + '</div>' +
+        '<div style="font-size:12px;color:#555"><strong>Management:</strong> ' + h.management + '</div>' +
+        '</div>';
+    }).join('');
+  }
+  const modal = document.getElementById('interaction-modal');
+  if (modal) modal.classList.add('open');
+}
+
+function closeInteractionWarning() {
+  _pendingInteractionAdd = null;
+  const modal = document.getElementById('interaction-modal');
+  if (modal) modal.classList.remove('open');
+}
+
+async function confirmAddDespiteInteraction() {
+  if (!_pendingInteractionAdd) return;
+  const nameEl = document.getElementById('med-name-input');
+  const doseEl = document.getElementById('med-dose-input');
+  const freqEl = document.getElementById('med-freq-input');
+  const timesEl = document.getElementById('med-times-input');
+  nameEl.value = _pendingInteractionAdd.name;
+  doseEl.value = _pendingInteractionAdd.dose;
+  freqEl.value = _pendingInteractionAdd.freq;
+  timesEl.value = _pendingInteractionAdd.times.join(', ');
+  _pendingInteractionAdd = null;
+  const modal = document.getElementById('interaction-modal');
+  if (modal) modal.classList.remove('open');
+  await addMedSchedule(true); // forceAdd=true, skip the check this time
+}
+
+// Checks a candidate medication name against the patient's currently
+// scheduled medications for known interactions (case-insensitive, checked
+// in both directions since a pair could be stored either way).
+async function checkDrugInteractions(newName, existingNames) {
+  const sb = svGetClient();
+  if (!sb || !newName || !existingNames.length) return [];
+  try {
+    const { data, error } = await sb.from('drug_interactions')
+      .select('*')
+      .or('drug_a.ilike.' + newName + ',drug_b.ilike.' + newName);
+    if (error) { console.error('[SyncVitals] drug interaction check failed —', error.message || error); return []; }
+    const existingLower = existingNames.map(function (n) { return n.toLowerCase(); });
+    return (data || []).filter(function (row) {
+      const other = row.drug_a.toLowerCase() === newName.toLowerCase() ? row.drug_b : row.drug_a;
+      return existingLower.indexOf(other.toLowerCase()) !== -1;
+    });
+  } catch (e) { console.error('[SyncVitals] drug interaction check threw an exception:', e); return []; }
+}
+
+async function addMedSchedule(forceAdd) {
   const pid = activePatientId || _nutrCurrentPid;
   if (!pid) return;
   const nameEl = document.getElementById('med-name-input');
@@ -3675,6 +3742,20 @@ async function addMedSchedule() {
     const toast = document.getElementById('sched-toast');
     if (toast) { toast.textContent = '⚠ Enter a name, dose, and at least one time'; toast.style.background='#EF9F27'; toast.style.display='block'; setTimeout(()=>{toast.style.display='none';toast.style.background='#1D9E75';},4000); }
     return;
+  }
+
+  // Real-time interaction check against this patient's existing schedule —
+  // provider-facing knowledge, separate from the patient-facing avoid-list
+  // content shown elsewhere. Requires explicit acknowledgment rather than
+  // silently blocking, since the prescriber may have clinical reasons to
+  // proceed anyway (e.g., with closer monitoring).
+  if (!forceAdd) {
+    const existing = await fetchMedSchedule(pid);
+    const hits = await checkDrugInteractions(name, existing.map(function (m) { return m.med_name; }));
+    if (hits.length) {
+      showDrugInteractionWarning(name, hits);
+      return;
+    }
   }
 
   const sb = svGetClient();
@@ -3850,6 +3931,21 @@ async function renderMedSchedule(pid) {
   const listEl = document.getElementById('med-schedule-list');
   if (!emptyEl || !listEl) return;
   if (!pid) { emptyEl.style.display = ''; emptyEl.textContent = 'Select a patient to view their medication schedule.'; listEl.innerHTML = ''; return; }
+
+  // AI-suggested dropdown: populate with medications relevant to this
+  // patient's actual conditions, pulled from the existing condition-keyed
+  // reference (MED_DB). Free-text entry still works if a needed med isn't
+  // in the list — this is a suggestion aid, not a restriction.
+  const suggestEl = document.getElementById('med-name-suggestions');
+  if (suggestEl) {
+    const p = svPatients.find(function (x) { return x.id === pid; });
+    const conditions = (p && p.conditions) || [];
+    const suggested = [];
+    conditions.forEach(function (c) {
+      (MED_DB[c] || []).forEach(function (m) { suggested.push(m.name); });
+    });
+    suggestEl.innerHTML = suggested.map(function (name) { return '<option value="' + name + '">'; }).join('');
+  }
 
   const meds = await fetchMedSchedule(pid);
   if (!meds.length) {
@@ -9497,6 +9593,19 @@ function nutrClear() {
     <button onclick="closeDayDetailModal()" style="width:100%;margin-top:16px;padding:13px;border-radius:10px;border:none;background:var(--sv-navy);color:#fff;font-size:16px;font-weight:700;cursor:pointer">Close</button>
   </div>
 </div>
+<div id="interaction-modal" class="sv-modal-overlay" onclick="if(event.target===this)closeInteractionWarning()">
+  <div class="sv-modal" style="max-width:440px;border-radius:16px">
+    <div class="sv-modal-handle"></div>
+    <div class="sv-modal-title" style="color:#E24B4A">⚠️ Potential Drug Interaction</div>
+    <div class="sv-modal-sub" id="interaction-modal-sub">Reference only — clinical decision remains with the prescriber</div>
+    <div id="interaction-modal-body" style="margin:12px 0"></div>
+    <div style="display:flex;gap:8px;margin-top:16px">
+      <button onclick="closeInteractionWarning()" style="flex:1;padding:11px;border-radius:10px;border:1.5px solid var(--sv-border);background:#fff;color:#555;font-size:14px;font-weight:600;cursor:pointer">Cancel</button>
+      <button onclick="confirmAddDespiteInteraction()" style="flex:1;padding:11px;border-radius:10px;border:none;background:#E24B4A;color:#fff;font-size:14px;font-weight:700;cursor:pointer">Add Anyway</button>
+    </div>
+  </div>
+</div>
+
 <div id="pdf-modal" class="sv-modal-overlay" onclick="if(event.target===this)closePdfModal()">
   <div class="sv-modal" style="max-width:420px;border-radius:16px">
     <div class="sv-modal-handle"></div>
