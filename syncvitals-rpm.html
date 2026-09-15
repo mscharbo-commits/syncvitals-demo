@@ -381,7 +381,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 </style>
 <script src="supabase-client.js"></script>
 <script src="lightweight-charts.js"></script>
-<script src="data-engine.js?v=1789445439"></script>
+<script src="data-engine.js?v=1789446068"></script>
 </head>
 <body>
 
@@ -1135,6 +1135,12 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 </div>
 <div id="nt-meds" class="sv-tc">
   <div style="padding:12px">
+    <div style="display:flex;gap:0;margin-bottom:14px;border-bottom:1px solid var(--sv-border)">
+      <button id="meds-view-schedule-btn" onclick="setMedsView('schedule')" style="padding:8px 14px;font-size:12px;font-weight:700;background:none;border:none;border-bottom:2px solid var(--sv-navy);color:var(--sv-navy);cursor:pointer">Schedule</button>
+      <button id="meds-view-adherence-btn" onclick="setMedsView('adherence')" style="padding:8px 14px;font-size:12px;font-weight:700;background:none;border:none;border-bottom:2px solid transparent;color:#888;cursor:pointer">Adherence</button>
+    </div>
+
+    <div id="meds-view-schedule">
     <div style="font-size:14px;font-weight:700;color:var(--sv-navy);margin-bottom:2px">Medication Schedule</div>
     <div style="font-size:12px;color:#888;margin-bottom:14px">Set the medications, doses, and times this patient is scheduled to take. The patient gets a confirmation prompt at each scheduled time.</div>
 
@@ -1159,6 +1165,11 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 
     <div id="med-schedule-empty" style="font-size:12px;color:#aaa;padding:16px;text-align:center">No medications scheduled yet.</div>
     <div id="med-schedule-list"></div>
+    </div>
+
+    <div id="meds-view-adherence" style="display:none">
+      <div id="med-adherence-content"></div>
+    </div>
   </div>
 </div>
 
@@ -3691,6 +3702,118 @@ async function removeMedSchedule(id, pid) {
 }
 
 const FREQ_LABELS = { 'daily':'Once daily', 'twice-daily':'Twice daily', 'three-times-daily':'Three times daily', 'weekly':'Weekly', 'as-needed':'As needed' };
+
+// ── MEDICATION ADHERENCE DASHBOARD ──
+// Computes real adherence from the confirmation log, replacing the old
+// single static Yes/Partial/No field. "Expected" doses are only those
+// that were actually due in the window (on or after the medication was
+// added, and not later than right now) — future doses and as-needed
+// meds (no fixed schedule to measure against) are excluded from the
+// denominator so the percentage reflects real opportunities to adhere.
+function setMedsView(view) {
+  const schedBtn = document.getElementById('meds-view-schedule-btn');
+  const adhBtn = document.getElementById('meds-view-adherence-btn');
+  const schedPanel = document.getElementById('meds-view-schedule');
+  const adhPanel = document.getElementById('meds-view-adherence');
+  const active = 'var(--sv-navy)', inactive = '#888', activeBorder = 'var(--sv-navy)', inactiveBorder = 'transparent';
+  if (view === 'schedule') {
+    schedBtn.style.color = active; schedBtn.style.borderBottomColor = activeBorder;
+    adhBtn.style.color = inactive; adhBtn.style.borderBottomColor = inactiveBorder;
+    schedPanel.style.display = ''; adhPanel.style.display = 'none';
+  } else {
+    adhBtn.style.color = active; adhBtn.style.borderBottomColor = activeBorder;
+    schedBtn.style.color = inactive; schedBtn.style.borderBottomColor = inactiveBorder;
+    schedPanel.style.display = 'none'; adhPanel.style.display = '';
+    const pid = activePatientId || _nutrCurrentPid;
+    if (pid) renderMedAdherence(pid);
+  }
+}
+
+async function fetchMedConfirmationsRange(pid, days) {
+  const sb = svGetClient();
+  if (!sb || !pid) return [];
+  const since = new Date(Date.now() - days * 86400000).toISOString().slice(0, 10);
+  try {
+    const { data, error } = await sb.from('medication_confirmations')
+      .select('*').eq('patient_id', pid).gte('scheduled_date', since);
+    if (error) { console.error('[SyncVitals] adherence fetch failed —', error.message || error); return []; }
+    return data || [];
+  } catch (e) { console.error('[SyncVitals] adherence fetch threw an exception:', e); return []; }
+}
+
+function computeAdherenceStats(schedule, confirmations, days) {
+  const now = Date.now();
+  const perMed = {}; // schedule_id -> { name, dose, expected, taken }
+  let totalExpected = 0, totalTaken = 0;
+
+  schedule.forEach(function (med) {
+    if (med.frequency === 'as-needed') return; // no fixed expectation to measure against
+    perMed[med.id] = { name: med.med_name, dose: med.dose, expected: 0, taken: 0 };
+    const addedAt = new Date(med.created_at).getTime();
+    const windowStart = Math.max(addedAt, now - days * 86400000);
+    for (let d = 0; d < days; d++) {
+      const dayTs = now - d * 86400000;
+      if (dayTs < windowStart) continue;
+      const dateStr = new Date(dayTs).toISOString().slice(0, 10);
+      (med.times || []).forEach(function (t) {
+        const [hh, mm] = t.split(':').map(Number);
+        const doseTs = new Date(dateStr + 'T' + t + ':00').getTime();
+        if (doseTs > now) return; // not due yet, don't count as an expected opportunity
+        perMed[med.id].expected++;
+        totalExpected++;
+        const match = confirmations.find(function (c) { return c.schedule_id === med.id && c.scheduled_date === dateStr && c.scheduled_time === t; });
+        if (match && match.status === 'yes') { perMed[med.id].taken++; totalTaken++; }
+      });
+    }
+  });
+
+  return {
+    overallPct: totalExpected > 0 ? Math.round((totalTaken / totalExpected) * 100) : null,
+    totalExpected: totalExpected, totalTaken: totalTaken,
+    perMed: Object.values(perMed).map(function (m) {
+      return Object.assign({}, m, { pct: m.expected > 0 ? Math.round((m.taken / m.expected) * 100) : null });
+    })
+  };
+}
+
+async function renderMedAdherence(pid) {
+  const el = document.getElementById('med-adherence-content');
+  if (!el) return;
+  el.innerHTML = '<div style="padding:20px;text-align:center;color:#888;font-size:12px">Loading…</div>';
+
+  const days = 14;
+  const [schedule, confirmations] = await Promise.all([
+    fetchMedSchedule(pid),
+    fetchMedConfirmationsRange(pid, days)
+  ]);
+
+  if (!schedule.length) {
+    el.innerHTML = '<div style="padding:20px;text-align:center;color:#aaa;font-size:12px">No medications scheduled — nothing to measure adherence against yet.</div>';
+    return;
+  }
+
+  const stats = computeAdherenceStats(schedule, confirmations, days);
+  if (stats.totalExpected === 0) {
+    el.innerHTML = '<div style="padding:20px;text-align:center;color:#aaa;font-size:12px">No doses have come due yet for the scheduled medications.</div>';
+    return;
+  }
+
+  const pctColor = function (pct) { return pct == null ? '#aaa' : pct >= 80 ? '#1D9E75' : pct >= 50 ? '#EF9F27' : '#E24B4A'; };
+
+  el.innerHTML =
+    '<div style="background:#F8FAFD;border:1px solid var(--sv-border);border-radius:10px;padding:16px;margin-bottom:16px;text-align:center">' +
+    '<div style="font-size:32px;font-weight:800;color:' + pctColor(stats.overallPct) + '">' + stats.overallPct + '%</div>' +
+    '<div style="font-size:12px;color:#888;margin-top:2px">Overall adherence — last ' + days + ' days (' + stats.totalTaken + ' of ' + stats.totalExpected + ' doses confirmed)</div>' +
+    '</div>' +
+    '<div style="font-size:12px;font-weight:700;color:var(--sv-navy);margin-bottom:8px">By Medication</div>' +
+    stats.perMed.map(function (m) {
+      return '<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 12px;border:1px solid var(--sv-border);border-radius:8px;margin-bottom:8px">' +
+        '<div><div style="font-size:13px;font-weight:700;color:var(--sv-navy)">' + m.name + ' — ' + m.dose + '</div>' +
+        '<div style="font-size:11px;color:#888;margin-top:2px">' + m.taken + ' of ' + m.expected + ' doses taken</div></div>' +
+        '<div style="font-size:16px;font-weight:800;color:' + pctColor(m.pct) + '">' + (m.pct == null ? '—' : m.pct + '%') + '</div>' +
+        '</div>';
+    }).join('');
+}
 
 async function renderMedSchedule(pid) {
   const emptyEl = document.getElementById('med-schedule-empty');
