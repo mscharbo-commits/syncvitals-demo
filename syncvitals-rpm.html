@@ -381,7 +381,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 </style>
 <script src="supabase-client.js"></script>
 <script src="lightweight-charts.js"></script>
-<script src="data-engine.js?v=1789478557"></script>
+<script src="data-engine.js?v=1789482744"></script>
 </head>
 <body>
 
@@ -3955,13 +3955,47 @@ async function renderMedSchedule(pid) {
     return;
   }
   emptyEl.style.display = 'none';
-  listEl.innerHTML = meds.map(function (m) {
-    const sourceTag = m.source === 'ehr' ? '<span style="font-size:9px;background:#E8F0FA;color:#185FA5;padding:1px 6px;border-radius:8px;margin-left:6px;font-weight:700">EHR</span>' : '';
-    return '<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 12px;border:1px solid var(--sv-border);border-radius:8px;margin-bottom:8px">' +
-      '<div><div style="font-size:13px;font-weight:700;color:var(--sv-navy)">' + m.med_name + ' — ' + m.dose + sourceTag + '</div>' +
-      '<div style="font-size:12px;color:#888;margin-top:2px">' + (FREQ_LABELS[m.frequency] || m.frequency) + ' · ' + m.times.join(', ') + '</div></div>' +
-      '<button data-med-id="' + m.id + '" data-pid="' + pid + '" onclick="removeMedSchedule(this.dataset.medId, this.dataset.pid)" style="background:none;border:none;color:#E24B4A;font-size:18px;cursor:pointer;padding:0 6px">×</button>' +
-      '</div>';
+
+  // Group by scheduled time — same principle as the patient-facing view:
+  // a nurse scanning the schedule thinks "what's due at 8am", not "when
+  // does Furosemide get taken". As-needed meds get their own group since
+  // they have no fixed time to sort by.
+  const groups = {}; // time (or 'as-needed') -> [meds]
+  meds.forEach(function (m) {
+    if (m.frequency === 'as-needed' || !m.times || !m.times.length) {
+      const key = 'as-needed';
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(m);
+      return;
+    }
+    m.times.forEach(function (t) {
+      if (!groups[t]) groups[t] = [];
+      groups[t].push(m);
+    });
+  });
+  const sortedKeys = Object.keys(groups).sort(function (a, b) {
+    if (a === 'as-needed') return 1;
+    if (b === 'as-needed') return -1;
+    return a.localeCompare(b);
+  });
+  const fmtTime = function (t) {
+    if (t === 'as-needed') return 'As Needed';
+    const [hh, mm] = t.split(':').map(Number);
+    const period = hh >= 12 ? 'PM' : 'AM';
+    const h12 = hh % 12 === 0 ? 12 : hh % 12;
+    return h12 + ':' + String(mm).padStart(2, '0') + ' ' + period;
+  };
+
+  listEl.innerHTML = sortedKeys.map(function (key) {
+    return '<div style="font-size:11px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:0.05em;margin:14px 0 8px">' + fmtTime(key) + '</div>' +
+      groups[key].map(function (m) {
+        const sourceTag = m.source === 'ehr' ? '<span style="font-size:9px;background:#E8F0FA;color:#185FA5;padding:1px 6px;border-radius:8px;margin-left:6px;font-weight:700">EHR</span>' : '';
+        return '<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 12px;border:1px solid var(--sv-border);border-radius:8px;margin-bottom:8px">' +
+          '<div><div style="font-size:13px;font-weight:700;color:var(--sv-navy)">' + m.med_name + ' — ' + m.dose + sourceTag + '</div>' +
+          '<div style="font-size:12px;color:#888;margin-top:2px">' + (FREQ_LABELS[m.frequency] || m.frequency) + '</div></div>' +
+          '<button data-med-id="' + m.id + '" data-pid="' + pid + '" onclick="removeMedSchedule(this.dataset.medId, this.dataset.pid)" style="background:none;border:none;color:#E24B4A;font-size:18px;cursor:pointer;padding:0 6px">×</button>' +
+          '</div>';
+      }).join('');
   }).join('');
 }
 
