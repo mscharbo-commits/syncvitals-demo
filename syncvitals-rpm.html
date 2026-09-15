@@ -381,7 +381,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 </style>
 <script src="supabase-client.js"></script>
 <script src="lightweight-charts.js"></script>
-<script src="data-engine.js?v=1789443824"></script>
+<script src="data-engine.js?v=1789444828"></script>
 </head>
 <body>
 
@@ -544,6 +544,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
       <div class="sv-tab" onclick="svTab(this,'nt-9090')">30/60/90</div>
       <div class="sv-tab" onclick="svTab(this,'nt-ai')">🏥 Admissions</div>
       <div class="sv-tab" onclick="svTab(this,'nt-nutrition')">🥗 Nutrition <span id="nutr-tab-badge" style="display:none;background:#E24B4A;color:#fff;font-size:9px;font-weight:700;padding:1px 5px;border-radius:10px;margin-left:3px;vertical-align:middle"></span></div>
+      <div class="sv-tab" onclick="svTab(this,'nt-meds')">💊 Medications</div>
       <div class="sv-tab" onclick="svTab(this,'nt-compare')">📊 Vitals Compare</div>
       <div class="sv-tab" onclick="svTab(this,'nt-appts')">📅 Appointments</div>
       <div class="sv-tab" onclick="svTab(this,'nt-patientpdf')">📄 Patient PDF</div>
@@ -1132,6 +1133,35 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     </div>
   </div>
 </div>
+<div id="nt-meds" class="sv-tc">
+  <div style="padding:12px">
+    <div style="font-size:14px;font-weight:700;color:var(--sv-navy);margin-bottom:2px">Medication Schedule</div>
+    <div style="font-size:12px;color:#888;margin-bottom:14px">Set the medications, doses, and times this patient is scheduled to take. The patient gets a confirmation prompt at each scheduled time.</div>
+
+    <div style="background:#F8FAFD;border:1px solid var(--sv-border);border-radius:10px;padding:14px;margin-bottom:16px">
+      <div style="font-size:12px;font-weight:700;color:var(--sv-navy);margin-bottom:8px">+ Add Medication</div>
+      <div style="display:grid;grid-template-columns:1.3fr 1fr;gap:8px;margin-bottom:8px">
+        <input id="med-name-input" type="text" placeholder="Medication name (e.g. Lisinopril)" style="padding:8px 10px;border:1px solid var(--sv-border);border-radius:8px;font-size:13px">
+        <input id="med-dose-input" type="text" placeholder="Dose (e.g. 10mg)" style="padding:8px 10px;border:1px solid var(--sv-border);border-radius:8px;font-size:13px">
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1.3fr;gap:8px;margin-bottom:10px">
+        <select id="med-freq-input" style="padding:8px 10px;border:1px solid var(--sv-border);border-radius:8px;font-size:13px">
+          <option value="daily">Once daily</option>
+          <option value="twice-daily">Twice daily</option>
+          <option value="three-times-daily">Three times daily</option>
+          <option value="weekly">Weekly</option>
+          <option value="as-needed">As needed</option>
+        </select>
+        <input id="med-times-input" type="text" placeholder="Times (e.g. 08:00, 20:00)" style="padding:8px 10px;border:1px solid var(--sv-border);border-radius:8px;font-size:13px">
+      </div>
+      <button onclick="addMedSchedule()" style="background:var(--sv-navy);color:#fff;border:none;border-radius:8px;padding:8px 16px;font-size:12px;font-weight:600;cursor:pointer">Add to Schedule</button>
+    </div>
+
+    <div id="med-schedule-empty" style="font-size:12px;color:#aaa;padding:16px;text-align:center">No medications scheduled yet.</div>
+    <div id="med-schedule-list"></div>
+  </div>
+</div>
+
 
 
 </div>
@@ -3600,6 +3630,92 @@ function svGetClient() {
 // Saves a structured snapshot of a generated care plan document (what was
 // actually included, not the PDF binary) so it can be looked up later —
 // by a nurse checking what a patient was given, or by the AI assistant.
+// ── MEDICATION SCHEDULE ──
+// Real, structured medication schedule per patient (name/dose/times/
+// frequency) — replaces the old single static adherence field. Source
+// field distinguishes nurse-entered ('manual') from a future EHR pull
+// ('ehr') so both write to the exact same schema; nothing else in the
+// system needs to change when an EHR integration is added later.
+async function fetchMedSchedule(pid) {
+  const sb = svGetClient();
+  if (!sb || !pid) return [];
+  try {
+    const { data, error } = await sb.from('medication_schedules')
+      .select('*').eq('patient_id', pid).eq('active', true)
+      .order('created_at', { ascending: true });
+    if (error) { console.error('[SyncVitals] medication schedule fetch failed —', error.message || error); return []; }
+    return data || [];
+  } catch (e) { console.error('[SyncVitals] medication schedule fetch threw an exception:', e); return []; }
+}
+
+async function addMedSchedule() {
+  const pid = activePatientId || _nutrCurrentPid;
+  if (!pid) return;
+  const nameEl = document.getElementById('med-name-input');
+  const doseEl = document.getElementById('med-dose-input');
+  const freqEl = document.getElementById('med-freq-input');
+  const timesEl = document.getElementById('med-times-input');
+  const name = (nameEl.value || '').trim();
+  const dose = (doseEl.value || '').trim();
+  const freq = freqEl.value;
+  const times = (timesEl.value || '').split(',').map(t => t.trim()).filter(Boolean);
+
+  if (!name || !dose || !times.length) {
+    const toast = document.getElementById('sched-toast');
+    if (toast) { toast.textContent = '⚠ Enter a name, dose, and at least one time'; toast.style.background='#EF9F27'; toast.style.display='block'; setTimeout(()=>{toast.style.display='none';toast.style.background='#1D9E75';},4000); }
+    return;
+  }
+
+  const sb = svGetClient();
+  if (!sb) return;
+  const p = svPatients.find(x => x.id === pid);
+  try {
+    const { error } = await sb.from('medication_schedules').insert({
+      patient_id: pid, med_name: name, dose: dose, times: times, frequency: freq,
+      source: 'manual', created_by: p ? p.nurse : null
+    });
+    if (error) { console.error('[SyncVitals] medication schedule save failed —', error.message || error); return; }
+    nameEl.value = ''; doseEl.value = ''; timesEl.value = '';
+    renderMedSchedule(pid);
+  } catch (e) { console.error('[SyncVitals] medication schedule save threw an exception:', e); }
+}
+
+async function removeMedSchedule(id, pid) {
+  const sb = svGetClient();
+  if (!sb) return;
+  try {
+    const { error } = await sb.from('medication_schedules').update({ active: false }).eq('id', id);
+    if (error) { console.error('[SyncVitals] medication schedule remove failed —', error.message || error); return; }
+    renderMedSchedule(pid);
+  } catch (e) { console.error('[SyncVitals] medication schedule remove threw an exception:', e); }
+}
+
+const FREQ_LABELS = { 'daily':'Once daily', 'twice-daily':'Twice daily', 'three-times-daily':'Three times daily', 'weekly':'Weekly', 'as-needed':'As needed' };
+
+async function renderMedSchedule(pid) {
+  const emptyEl = document.getElementById('med-schedule-empty');
+  const listEl = document.getElementById('med-schedule-list');
+  if (!emptyEl || !listEl) return;
+  if (!pid) { emptyEl.style.display = ''; emptyEl.textContent = 'Select a patient to view their medication schedule.'; listEl.innerHTML = ''; return; }
+
+  const meds = await fetchMedSchedule(pid);
+  if (!meds.length) {
+    emptyEl.style.display = '';
+    emptyEl.textContent = 'No medications scheduled yet.';
+    listEl.innerHTML = '';
+    return;
+  }
+  emptyEl.style.display = 'none';
+  listEl.innerHTML = meds.map(function (m) {
+    const sourceTag = m.source === 'ehr' ? '<span style="font-size:9px;background:#E8F0FA;color:#185FA5;padding:1px 6px;border-radius:8px;margin-left:6px;font-weight:700">EHR</span>' : '';
+    return '<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 12px;border:1px solid var(--sv-border);border-radius:8px;margin-bottom:8px">' +
+      '<div><div style="font-size:13px;font-weight:700;color:var(--sv-navy)">' + m.med_name + ' — ' + m.dose + sourceTag + '</div>' +
+      '<div style="font-size:12px;color:#888;margin-top:2px">' + (FREQ_LABELS[m.frequency] || m.frequency) + ' · ' + m.times.join(', ') + '</div></div>' +
+      '<button data-med-id="' + m.id + '" data-pid="' + pid + '" onclick="removeMedSchedule(this.dataset.medId, this.dataset.pid)" style="background:none;border:none;color:#E24B4A;font-size:18px;cursor:pointer;padding:0 6px">×</button>' +
+      '</div>';
+  }).join('');
+}
+
 async function saveCarePlanDocument(pid, docType, byCategory, meta, totalItems) {
   const sb = svGetClient();
   if (!sb || !pid) { console.warn('[SyncVitals] care plan document not saved — client or patient unavailable'); return; }
@@ -7992,6 +8108,10 @@ function svTab(el,name){
   if (name === 'nt-patientpdf') {
     const pid = activePatientId || _nutrCurrentPid;
     if (pid) renderPatientPdf(pid);
+  }
+  if (name === 'nt-meds') {
+    const pid = activePatientId || _nutrCurrentPid;
+    if (pid) renderMedSchedule(pid);
   }
 }
 function svInsert(txt){document.getElementById('sv-reply').value=txt}
