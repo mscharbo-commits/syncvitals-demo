@@ -381,7 +381,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 </style>
 <script src="supabase-client.js"></script>
 <script src="lightweight-charts.js"></script>
-<script src="data-engine.js?v=1789483266"></script>
+<script src="data-engine.js?v=1789484099"></script>
 </head>
 <body>
 
@@ -3824,12 +3824,12 @@ async function fetchMedConfirmationsRange(pid, days) {
 
 function computeAdherenceStats(schedule, confirmations, days) {
   const now = Date.now();
-  const perMed = {}; // schedule_id -> { name, dose, expected, taken }
+  const perMed = {}; // schedule_id -> { name, dose, expected, taken, missed: [{date, time}] }
   let totalExpected = 0, totalTaken = 0;
 
   schedule.forEach(function (med) {
     if (med.frequency === 'as-needed') return; // no fixed expectation to measure against
-    perMed[med.id] = { name: med.med_name, dose: med.dose, expected: 0, taken: 0 };
+    perMed[med.id] = { name: med.med_name, dose: med.dose, expected: 0, taken: 0, missed: [] };
     const addedAt = new Date(med.created_at).getTime();
     const windowStart = Math.max(addedAt, now - days * 86400000);
     for (let d = 0; d < days; d++) {
@@ -3844,8 +3844,10 @@ function computeAdherenceStats(schedule, confirmations, days) {
         totalExpected++;
         const match = confirmations.find(function (c) { return c.schedule_id === med.id && c.scheduled_date === dateStr && c.scheduled_time === t; });
         if (match && match.status === 'yes') { perMed[med.id].taken++; totalTaken++; }
+        else { perMed[med.id].missed.push({ date: dateStr, time: t, status: (match && match.status === 'no') ? 'declined' : 'unconfirmed' }); }
       });
     }
+    perMed[med.id].missed.sort(function (a, b) { return b.date.localeCompare(a.date) || b.time.localeCompare(a.time); }); // most recent first
   });
 
   return {
@@ -3911,17 +3913,39 @@ async function renderMedAdherence(pid) {
 
   const pctColor = function (pct) { return pct == null ? '#aaa' : pct >= 80 ? '#1D9E75' : pct >= 50 ? '#EF9F27' : '#E24B4A'; };
 
+  const fmtMissedTime = function (t) {
+    const [hh, mm] = t.split(':').map(Number);
+    const period = hh >= 12 ? 'PM' : 'AM';
+    const h12 = hh % 12 === 0 ? 12 : hh % 12;
+    return h12 + ':' + String(mm).padStart(2, '0') + ' ' + period;
+  };
+  const fmtMissedDate = function (d) {
+    const parts = d.split('-');
+    const dt = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+    return dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  };
+
   el.innerHTML = alertsHtml +
     '<div style="background:#F8FAFD;border:1px solid var(--sv-border);border-radius:10px;padding:16px;margin-bottom:16px;text-align:center">' +
     '<div style="font-size:32px;font-weight:800;color:' + pctColor(stats.overallPct) + '">' + stats.overallPct + '%</div>' +
     '<div style="font-size:12px;color:#888;margin-top:2px">Overall adherence — last ' + days + ' days (' + stats.totalTaken + ' of ' + stats.totalExpected + ' doses confirmed)</div>' +
     '</div>' +
-    '<div style="font-size:12px;font-weight:700;color:var(--sv-navy);margin-bottom:8px">By Medication</div>' +
-    stats.perMed.map(function (m) {
-      return '<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 12px;border:1px solid var(--sv-border);border-radius:8px;margin-bottom:8px">' +
+    '<div style="font-size:12px;font-weight:700;color:var(--sv-navy);margin-bottom:8px">By Medication — click a row to see when doses were missed</div>' +
+    stats.perMed.map(function (m, idx) {
+      const rowId = 'missed-row-' + idx;
+      const missedListHtml = m.missed.length
+        ? m.missed.map(function (miss) {
+            const tag = miss.status === 'declined' ? '<span style="color:#E24B4A">✗ Declined</span>' : '<span style="color:#EF9F27">— No response</span>';
+            return '<div style="display:flex;justify-content:space-between;padding:5px 0;font-size:12px;border-bottom:1px solid #f0f0f0"><span>' + fmtMissedDate(miss.date) + ' · ' + fmtMissedTime(miss.time) + '</span>' + tag + '</div>';
+          }).join('')
+        : '<div style="font-size:12px;color:#888;padding:5px 0">No missed doses in this window.</div>';
+      return '<div style="border:1px solid var(--sv-border);border-radius:8px;margin-bottom:8px;overflow:hidden">' +
+        '<div onclick="document.getElementById(\'' + rowId + '\').style.display = document.getElementById(\'' + rowId + '\').style.display===\'none\'?\'\':\'none\'" style="display:flex;justify-content:space-between;align-items:center;padding:10px 12px;cursor:pointer">' +
         '<div><div style="font-size:13px;font-weight:700;color:var(--sv-navy)">' + m.name + ' — ' + m.dose + '</div>' +
-        '<div style="font-size:11px;color:#888;margin-top:2px">' + m.taken + ' of ' + m.expected + ' doses taken</div></div>' +
-        '<div style="font-size:16px;font-weight:800;color:' + pctColor(m.pct) + '">' + (m.pct == null ? '—' : m.pct + '%') + '</div>' +
+        '<div style="font-size:11px;color:#888;margin-top:2px">' + m.taken + ' of ' + m.expected + ' doses taken' + (m.missed.length ? ' · ' + m.missed.length + ' missed' : '') + '</div></div>' +
+        '<div style="display:flex;align-items:center;gap:8px"><div style="font-size:16px;font-weight:800;color:' + pctColor(m.pct) + '">' + (m.pct == null ? '—' : m.pct + '%') + '</div><span style="color:#aaa;font-size:11px">▾</span></div>' +
+        '</div>' +
+        '<div id="' + rowId + '" style="display:none;padding:0 12px 10px;background:#FAFBFC">' + missedListHtml + '</div>' +
         '</div>';
     }).join('');
 }
