@@ -253,7 +253,7 @@
   .tab-btn.active { background: var(--card); color: var(--navy); box-shadow: 0 1px 4px rgba(0,0,0,0.08); }
 </style>
 <script src="supabase-client.js"></script>
-<script src="data-engine.js?v=1789446068"></script>
+<script src="data-engine.js?v=1789446742"></script>
 </head>
 <body>
 
@@ -2340,7 +2340,20 @@ async function renderMedsPage() {
       rows.push({ med: med, time: t, status: status });
     });
   });
-  rows.sort(function (a, b) { return (a.time || '99:99').localeCompare(b.time || '99:99'); });
+  // Group by scheduled time — a patient thinks "what do I take at 8am",
+  // not "when do I take Furosemide", so group across medications rather
+  // than listing each medication with its own repeated time.
+  const groups = {}; // time (or 'as-needed') -> [rows]
+  rows.forEach(function (r) {
+    const key = r.time || 'as-needed';
+    if (!groups[key]) groups[key] = [];
+    groups[key].push(r);
+  });
+  const sortedKeys = Object.keys(groups).sort(function (a, b) {
+    if (a === 'as-needed') return 1;
+    if (b === 'as-needed') return -1;
+    return a.localeCompare(b);
+  });
 
   const fmtTime = function (t) {
     if (!t) return '';
@@ -2353,28 +2366,32 @@ async function renderMedsPage() {
   el.innerHTML = '<div style="padding:16px">' +
     '<div style="font-size:16px;font-weight:700;color:var(--navy);margin-bottom:2px">Today\'s Medications</div>' +
     '<div style="font-size:12px;color:#888;margin-bottom:16px">Let us know when you\'ve taken each dose.</div>' +
-    rows.map(function (r) {
-      const isDue = r.status === 'due';
-      const isYes = r.status === 'yes';
-      const isNo = r.status === 'no';
-      const isUpcoming = r.status === 'upcoming';
-      const isAsNeeded = r.status === 'as-needed';
-      let statusBadge = '';
-      if (isYes) statusBadge = '<span style="color:#1D9E75;font-weight:700;font-size:12px">✓ Taken</span>';
-      else if (isNo) statusBadge = '<span style="color:#E24B4A;font-weight:700;font-size:12px">✗ Not taken</span>';
-      else if (isUpcoming) statusBadge = '<span style="color:#aaa;font-size:12px">Upcoming</span>';
+    sortedKeys.map(function (key) {
+      const groupRows = groups[key];
+      const groupLabel = key === 'as-needed' ? 'As Needed' : fmtTime(key);
+      return '<div style="font-size:11px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:0.05em;margin:14px 0 8px">' + groupLabel + '</div>' +
+        groupRows.map(function (r) {
+          const isDue = r.status === 'due';
+          const isYes = r.status === 'yes';
+          const isNo = r.status === 'no';
+          const isUpcoming = r.status === 'upcoming';
+          const isAsNeeded = r.status === 'as-needed';
+          let statusBadge = '';
+          if (isYes) statusBadge = '<span style="color:#1D9E75;font-weight:700;font-size:12px">✓ Taken</span>';
+          else if (isNo) statusBadge = '<span style="color:#E24B4A;font-weight:700;font-size:12px">✗ Not taken</span>';
+          else if (isUpcoming) statusBadge = '<span style="color:#aaa;font-size:12px">Upcoming</span>';
 
-      return '<div style="background:#fff;border:1px solid var(--border,#eee);border-radius:10px;padding:12px 14px;margin-bottom:8px;' + (isDue ? 'border-color:#EF9F27' : '') + '">' +
-        '<div style="display:flex;justify-content:space-between;align-items:center">' +
-        '<div><div style="font-size:14px;font-weight:700;color:var(--navy)">' + r.med.med_name + ' — ' + r.med.dose + '</div>' +
-        '<div style="font-size:12px;color:#888;margin-top:2px">' + (isAsNeeded ? 'As needed' : fmtTime(r.time)) + '</div></div>' +
-        statusBadge +
-        '</div>' +
-        ((isDue || isAsNeeded) ? '<div style="display:flex;gap:8px;margin-top:10px">' +
-          '<button data-schedule-id="' + r.med.id + '" data-time="' + (r.time || '') + '" onclick="confirmMedDose(this.dataset.scheduleId, this.dataset.time, \'yes\')" style="flex:1;background:#1D9E75;color:#fff;border:none;border-radius:8px;padding:8px;font-size:12px;font-weight:700;cursor:pointer">✓ Yes, I took it</button>' +
-          '<button data-schedule-id="' + r.med.id + '" data-time="' + (r.time || '') + '" onclick="confirmMedDose(this.dataset.scheduleId, this.dataset.time, \'no\')" style="flex:1;background:#f5f5f5;color:#888;border:none;border-radius:8px;padding:8px;font-size:12px;font-weight:700;cursor:pointer">Not yet</button>' +
-          '</div>' : '') +
-        '</div>';
+          return '<div style="background:#fff;border:1px solid var(--border,#eee);border-radius:10px;padding:12px 14px;margin-bottom:8px;' + (isDue ? 'border-color:#EF9F27' : '') + '">' +
+            '<div style="display:flex;justify-content:space-between;align-items:center">' +
+            '<div style="font-size:14px;font-weight:700;color:var(--navy)">' + r.med.med_name + ' — ' + r.med.dose + '</div>' +
+            statusBadge +
+            '</div>' +
+            ((isDue || isAsNeeded) ? '<div style="display:flex;gap:8px;margin-top:10px">' +
+              '<button data-schedule-id="' + r.med.id + '" data-time="' + (r.time || '') + '" onclick="confirmMedDose(this.dataset.scheduleId, this.dataset.time, \'yes\')" style="flex:1;background:#1D9E75;color:#fff;border:none;border-radius:8px;padding:8px;font-size:12px;font-weight:700;cursor:pointer">✓ Yes, I took it</button>' +
+              '<button data-schedule-id="' + r.med.id + '" data-time="' + (r.time || '') + '" onclick="confirmMedDose(this.dataset.scheduleId, this.dataset.time, \'no\')" style="flex:1;background:#f5f5f5;color:#888;border:none;border-radius:8px;padding:8px;font-size:12px;font-weight:700;cursor:pointer">Not yet</button>' +
+              '</div>' : '') +
+            '</div>';
+        }).join('');
     }).join('') +
     '</div>';
 }
