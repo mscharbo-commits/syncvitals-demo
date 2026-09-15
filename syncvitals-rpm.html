@@ -381,7 +381,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 </style>
 <script src="supabase-client.js"></script>
 <script src="lightweight-charts.js"></script>
-<script src="data-engine.js?v=1789484099"></script>
+<script src="data-engine.js?v=1789484296"></script>
 </head>
 <body>
 
@@ -1102,6 +1102,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
           <div style="height:22px"></div>
           <div style="font-size:11px;font-weight:700;color:#00897B;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:4px">Activity</div>
           <div id="nt-compare-chart-activity" style="width:100%"></div>
+
+          <div style="height:22px"></div>
+          <div style="font-size:11px;font-weight:700;color:#7C5CBF;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:4px">Medication Adherence</div>
+          <div id="nt-compare-chart-medications" style="width:100%"></div>
 
           <div class="sv-trend-range" id="nt-compare-range" style="margin-top:14px">
             <button data-days="7" onclick="setCompareRange(7)">7D</button>
@@ -3052,7 +3056,7 @@ async function buildAiAssistContext(pid) {
   const p = svPatients.find(function (x) { return x.id === pid; });
   if (!p) return 'No patient is currently open. Answer only general questions, and ask the user to open a patient for anything patient-specific.';
 
-  const data = buildCompareData(p, 14);
+  const data = await buildCompareData(p, 14);
   const latest = data[data.length - 1] || {};
   const goals = nutrGetGoalsForPid(pid);
 
@@ -5346,7 +5350,11 @@ const _compareCharts = {
   vitals: { chart: null, key: null, sbp: null, dbp: null, panes: {} },
   nutrition: { chart: null, key: null, panes: {} },
   activity: { chart: null, key: null, panes: {} },
+  medications: { chart: null, key: null, panes: {} },
 };
+// Medication names contain spaces/slashes that aren't safe as object keys
+// or chart series identifiers - this gives each one a stable, safe key.
+function medCompareKey(medName) { return 'med_' + medName.toLowerCase().replace(/[^a-z0-9]+/g, '_'); }
 const COMPARE_METRIC_DEFS = {
   vitals: [
     { key: 'hr', label: 'Heart Rate', unit: 'bpm', color: '#D97B4F' },
@@ -5380,11 +5388,21 @@ function setCompareRange(days) {
 // completely different thing from the blood potassium lab value (mEq/L)
 // already shown on the main vitals chart. Named distinctly here to avoid
 // conflating the two when reading this data.
-function buildCompareData(p, days) {
+let _compareCurrentMedSchedule = []; // set by buildCompareData as a side effect, read by getCompareMetrics - avoids a second redundant fetch and avoids changing buildCompareData's return shape (also used by the AI assistant, which expects a plain rows array)
+async function buildCompareData(p, days) {
   const vitalsByDate = {};
   bucketHistoryByDay(p.vitalHistory || []).forEach(function (v) {
     vitalsByDate[new Date(v.ts).toISOString().slice(0, 10)] = v;
   });
+
+  // Medication adherence, day by day, per medication - so it can be
+  // plotted right alongside vitals/nutrition/activity on the same
+  // timeline, not just as a single rolled-up percentage.
+  const schedule = await fetchMedSchedule(p.id);
+  _compareCurrentMedSchedule = schedule;
+  const timeBasedMeds = schedule.filter(function (m) { return m.frequency !== 'as-needed' && m.times && m.times.length; });
+  const confirmations = timeBasedMeds.length ? await fetchMedConfirmationsRange(p.id, days) : [];
+
   const rows = [];
   for (let i = days - 1; i >= 0; i--) {
     const d = new Date(); d.setDate(d.getDate() - i); d.setHours(0, 0, 0, 0);
@@ -5394,7 +5412,7 @@ function buildCompareData(p, days) {
     const acts = nutrGetActs(p.id, dateStr) || [];
     const steps = acts.reduce(function (s, a) { return s + (a.steps || 0); }, 0);
     const activityMin = acts.reduce(function (s, a) { return s + (a.duration || 0); }, 0);
-    rows.push({
+    const row = {
       dateStr: dateStr, ts: d.getTime(),
       sbp: v.sbp, dbp: v.dbp, hr: v.hr, spo2: v.spo2, weight: v.weight, bloodGlucose: v.glucose,
       riskScore: v.riskScore,
@@ -5403,11 +5421,29 @@ function buildCompareData(p, days) {
       carbs: totals.carbs || null, sugar: totals.sugar || null, fat: totals.fat || null,
       phosphorus: totals.phosphorus || null,
       steps: steps || null, activityMin: activityMin || null
+    };
+    // Per-medication daily adherence % - only for doses that were actually
+    // due that day (on/after the med was added, not later than now),
+    // matching the same "real opportunities only" logic as the Adherence tab.
+    timeBasedMeds.forEach(function (med) {
+      const addedDateStr = new Date(med.created_at).toISOString().slice(0, 10);
+      if (dateStr < addedDateStr) return; // row stays null - med didn't exist yet
+      let expected = 0, taken = 0;
+      med.times.forEach(function (t) {
+        const doseTs = new Date(dateStr + 'T' + t + ':00').getTime();
+        if (doseTs > Date.now()) return;
+        expected++;
+        const match = confirmations.find(function (c) { return c.schedule_id === med.id && c.scheduled_date === dateStr && c.scheduled_time === t; });
+        if (match && match.status === 'yes') taken++;
+      });
+      row[medCompareKey(med.med_name)] = expected > 0 ? Math.round((taken / expected) * 100) : null;
     });
+    rows.push(row);
   }
   return rows;
 }
 
+const MED_COMPARE_COLORS = ['#7C5CBF', '#C2839B', '#4A7C8C', '#B0762E', '#5C8A5C'];
 function getCompareMetrics(p, data) {
   const conditions = p.conditions || [];
   function filterGroup(defs) {
@@ -5416,10 +5452,16 @@ function getCompareMetrics(p, data) {
       return data.some(function (row) { return row[d.key] != null; });
     });
   }
+  const medDefs = (_compareCurrentMedSchedule || [])
+    .filter(function (m) { return m.frequency !== 'as-needed'; })
+    .map(function (m, i) {
+      return { key: medCompareKey(m.med_name), label: m.med_name, unit: '%', color: MED_COMPARE_COLORS[i % MED_COMPARE_COLORS.length] };
+    });
   return {
     vitals: filterGroup(COMPARE_METRIC_DEFS.vitals),
     nutrition: filterGroup(COMPARE_METRIC_DEFS.nutrition),
     activity: filterGroup(COMPARE_METRIC_DEFS.activity),
+    medications: filterGroup(medDefs),
   };
 }
 
@@ -5543,6 +5585,7 @@ function renderCompareLegend(row) {
     row_('Vitals', bpChip + riskChip + groupChips(_compareCurrentMetrics.vitals)),
     row_('Nutrition', groupChips(_compareCurrentMetrics.nutrition)),
     row_('Activity', groupChips(_compareCurrentMetrics.activity)),
+    row_('Medications', groupChips(_compareCurrentMetrics.medications)),
   ].join('') + (row ? '<div style="font-size:10px;color:#aaa;margin-top:2px">' + new Date(row.ts).toLocaleDateString('en-US', { weekday:'short', month: 'short', day: 'numeric' }) + '</div>' : '');
   legendEl.innerHTML = html;
 }
@@ -5556,7 +5599,7 @@ function onCompareCrosshairMove(param) {
   renderCompareLegend(row || null);
 }
 
-function renderVitalsCompare(pid) {
+async function renderVitalsCompare(pid) {
   const emptyEl = document.getElementById('nt-compare-empty');
   const bodyEl = document.getElementById('nt-compare-body');
   const p = svPatients.find(function (x) { return x.id === pid; });
@@ -5566,7 +5609,7 @@ function renderVitalsCompare(pid) {
 
   document.querySelectorAll('#nt-compare-range button').forEach(function (b) { b.classList.toggle('active', +b.dataset.days === _compareRangeDays); });
 
-  const data = buildCompareData(p, _compareRangeDays);
+  const data = await buildCompareData(p, _compareRangeDays);
   const metrics = getCompareMetrics(p, data);
   _compareCurrentData = data;
   _compareCurrentMetrics = metrics;
@@ -5575,9 +5618,10 @@ function renderVitalsCompare(pid) {
   ensureGroupChart('vitals', 'nt-compare-chart-vitals', p, metrics.vitals, true);
   ensureGroupChart('nutrition', 'nt-compare-chart-nutrition', p, metrics.nutrition, false);
   ensureGroupChart('activity', 'nt-compare-chart-activity', p, metrics.activity, false);
+  ensureGroupChart('medications', 'nt-compare-chart-medications', p, metrics.medications, false);
   renderCompareLegend(null);
 
-  ['vitals', 'nutrition', 'activity'].forEach(function (g) {
+  ['vitals', 'nutrition', 'activity', 'medications'].forEach(function (g) {
     const state = _compareCharts[g];
     if (!state.chart) return;
     if (g === 'vitals') {
