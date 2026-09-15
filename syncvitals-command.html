@@ -178,7 +178,8 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
 .btn-secondary { background:rgba(13,46,110,0.08); color:var(--navy); }
 .btn-secondary:hover { background:rgba(13,46,110,0.15); }
 </style>
-<script src="data-engine.js?v=1789446742"></script>
+<script src="data-engine.js?v=1789447034"></script>
+<script src="supabase-client.js"></script>
 </head>
 <body>
 
@@ -901,7 +902,49 @@ function _navTo(url, winName, event) {
 }
 
 
+// ── MEDICATION ALERTS ──
+// Merges declined/missed-dose alerts from the Patient Portal into the same
+// feed as the engine's own vitals-threshold alerts, so a supervisor sees
+// everything in one place rather than needing to check each patient's
+// Medications tab individually.
+const SV_SUPABASE_URL = 'https://qbaougugtogrybssgjwb.supabase.co';
+const SV_SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFiYW91Z3VndG9ncnlic3NnandiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODYwNjAzMDQsImV4cCI6MjEwMTYzNjMwNH0.ye4fQVY-7d1UzBy3Vei0cqsebbZGyevSrQs94Eh83YY';
+let _svClient = null;
+function svGetClient() {
+  if (_svClient) return _svClient;
+  if (typeof supabase === 'undefined') return null;
+  _svClient = supabase.createClient(SV_SUPABASE_URL, SV_SUPABASE_KEY);
+  return _svClient;
+}
+
+const _medAlertIdsSeen = new Set(); // avoid re-adding the same alert to the local feed every poll
+async function loadMedicationAlerts() {
+  const sb = svGetClient();
+  if (!sb) return;
+  try {
+    const { data, error } = await sb.from('medication_alerts').select('*').eq('read', false);
+    if (error) { console.error('[SyncVitals] medication alerts poll failed —', error.message || error); return; }
+    (data || []).forEach(function (a) {
+      if (_medAlertIdsSeen.has(a.id)) return;
+      _medAlertIdsSeen.add(a.id);
+      const p = PATIENTS.find(function (x) { return x.id === a.patient_id; });
+      alerts.unshift({
+        pid: a.patient_id, name: p ? p.name : a.patient_id,
+        sev: a.alert_type === 'declined' ? 'crit' : 'warn',
+        msg: '💊 ' + a.message,
+        ts: new Date(a.created_at).toLocaleTimeString()
+      });
+    });
+    if (typeof renderAlerts === 'function' && document.getElementById('tab-alerts')) renderAlerts();
+  } catch (e) { console.error('[SyncVitals] medication alerts poll threw an exception:', e); }
+}
+setInterval(loadMedicationAlerts, 30000);
+document.addEventListener('DOMContentLoaded', () => { setTimeout(loadMedicationAlerts, 1000); });
+
 // Poll nutrition alerts every 30s
+// NOTE: loadNutritionAlerts is referenced here but was never actually
+// defined anywhere in this file — pre-existing, out of scope for this
+// change. Left as-is rather than silently "fixed" as a side effect.
 setInterval(loadNutritionAlerts, 30000);
 document.addEventListener('DOMContentLoaded', () => { setTimeout(loadNutritionAlerts, 1000); });
 

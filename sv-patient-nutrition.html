@@ -253,7 +253,7 @@
   .tab-btn.active { background: var(--card); color: var(--navy); box-shadow: 0 1px 4px rgba(0,0,0,0.08); }
 </style>
 <script src="supabase-client.js"></script>
-<script src="data-engine.js?v=1789446742"></script>
+<script src="data-engine.js?v=1789447034"></script>
 </head>
 <body>
 
@@ -2324,6 +2324,8 @@ async function renderMedsPage() {
 
   // Build today's due instances: one row per (medication, scheduled time)
   const rows = [];
+  const MISSED_THRESHOLD_MIN = 120; // 2 hours past due with no response = alert the care team
+  const missedAlerts = [];
   schedule.forEach(function (med) {
     if (med.frequency === 'as-needed') {
       rows.push({ med: med, time: null, status: 'as-needed' });
@@ -2338,8 +2340,24 @@ async function renderMedsPage() {
       else if (timeMinutes <= nowMinutes) status = 'due';
       else status = 'upcoming';
       rows.push({ med: med, time: t, status: status });
+      if (status === 'due' && (nowMinutes - timeMinutes) >= MISSED_THRESHOLD_MIN) {
+        missedAlerts.push({ med_name: med.med_name, time: t });
+      }
     });
   });
+  if (missedAlerts.length) {
+    const sb = svGetClient();
+    if (sb) {
+      missedAlerts.forEach(function (m) {
+        sb.from('medication_alerts').upsert({
+          patient_id: currentPid, med_name: m.med_name, scheduled_time: m.time,
+          alert_type: 'missed', message: m.med_name + ' at ' + m.time + ' has gone unconfirmed for over 2 hours.'
+        }, { onConflict: 'patient_id,med_name,scheduled_time,alert_type' }).then(function (r) {
+          if (r.error) console.error('[SyncVitals] missed dose alert failed:', r.error.message || r.error);
+        });
+      });
+    }
+  }
   // Group by scheduled time — a patient thinks "what do I take at 8am",
   // not "when do I take Furosemide", so group across medications rather
   // than listing each medication with its own repeated time.
@@ -2387,8 +2405,8 @@ async function renderMedsPage() {
             statusBadge +
             '</div>' +
             ((isDue || isAsNeeded) ? '<div style="display:flex;gap:8px;margin-top:10px">' +
-              '<button data-schedule-id="' + r.med.id + '" data-time="' + (r.time || '') + '" onclick="confirmMedDose(this.dataset.scheduleId, this.dataset.time, \'yes\')" style="flex:1;background:#1D9E75;color:#fff;border:none;border-radius:8px;padding:8px;font-size:12px;font-weight:700;cursor:pointer">✓ Yes, I took it</button>' +
-              '<button data-schedule-id="' + r.med.id + '" data-time="' + (r.time || '') + '" onclick="confirmMedDose(this.dataset.scheduleId, this.dataset.time, \'no\')" style="flex:1;background:#f5f5f5;color:#888;border:none;border-radius:8px;padding:8px;font-size:12px;font-weight:700;cursor:pointer">Not yet</button>' +
+              '<button data-schedule-id="' + r.med.id + '" data-time="' + (r.time || '') + '" data-med-name="' + r.med.med_name + '" onclick="confirmMedDose(this.dataset.scheduleId, this.dataset.time, \'yes\', this.dataset.medName)" style="flex:1;background:#1D9E75;color:#fff;border:none;border-radius:8px;padding:8px;font-size:12px;font-weight:700;cursor:pointer">✓ Yes, I took it</button>' +
+              '<button data-schedule-id="' + r.med.id + '" data-time="' + (r.time || '') + '" data-med-name="' + r.med.med_name + '" onclick="confirmMedDose(this.dataset.scheduleId, this.dataset.time, \'no\', this.dataset.medName)" style="flex:1;background:#f5f5f5;color:#888;border:none;border-radius:8px;padding:8px;font-size:12px;font-weight:700;cursor:pointer">Not yet</button>' +
               '</div>' : '') +
             '</div>';
         }).join('');
@@ -2396,7 +2414,7 @@ async function renderMedsPage() {
     '</div>';
 }
 
-async function confirmMedDose(scheduleId, time, status) {
+async function confirmMedDose(scheduleId, time, status, medName) {
   const sb = svGetClient();
   if (!sb || !currentPid) return;
   const todayStr = new Date().toISOString().slice(0, 10);
@@ -2406,6 +2424,19 @@ async function confirmMedDose(scheduleId, time, status) {
       scheduled_time: time || 'as-needed', status: status, confirmed_at: new Date().toISOString(), confirmed_by: 'patient'
     }, { onConflict: 'schedule_id,scheduled_date,scheduled_time' });
     if (error) { console.error('[SyncVitals] medication confirmation save failed —', error.message || error); return; }
+
+    // Explicit "No" is a direct signal something needs attention — alert
+    // the care team immediately, not just left to show up as a low number
+    // in an adherence percentage later.
+    if (status === 'no') {
+      try {
+        await sb.from('medication_alerts').upsert({
+          patient_id: currentPid, med_name: medName || 'Medication', scheduled_time: time || 'as-needed',
+          alert_type: 'declined', message: (medName || 'A medication') + ' was marked as not taken (' + (time || 'as-needed') + ').'
+        }, { onConflict: 'patient_id,med_name,scheduled_time,alert_type' });
+      } catch (e) { console.error('[SyncVitals] medication decline alert failed:', e); }
+    }
+
     renderMedsPage();
   } catch (e) { console.error('[SyncVitals] medication confirmation save threw an exception:', e); }
 }

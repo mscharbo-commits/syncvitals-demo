@@ -381,7 +381,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 </style>
 <script src="supabase-client.js"></script>
 <script src="lightweight-charts.js"></script>
-<script src="data-engine.js?v=1789446742"></script>
+<script src="data-engine.js?v=1789447034"></script>
 </head>
 <body>
 
@@ -3776,31 +3776,61 @@ function computeAdherenceStats(schedule, confirmations, days) {
   };
 }
 
+async function fetchMedAlerts(pid) {
+  const sb = svGetClient();
+  if (!sb || !pid) return [];
+  try {
+    const { data, error } = await sb.from('medication_alerts')
+      .select('*').eq('patient_id', pid).eq('read', false)
+      .order('created_at', { ascending: false });
+    if (error) { console.error('[SyncVitals] medication alerts fetch failed —', error.message || error); return []; }
+    return data || [];
+  } catch (e) { console.error('[SyncVitals] medication alerts fetch threw an exception:', e); return []; }
+}
+
+async function dismissMedAlert(id, pid) {
+  const sb = svGetClient();
+  if (!sb) return;
+  try {
+    await sb.from('medication_alerts').update({ read: true }).eq('id', id);
+    renderMedAdherence(pid);
+  } catch (e) { console.error('[SyncVitals] dismissing medication alert threw an exception:', e); }
+}
+
 async function renderMedAdherence(pid) {
   const el = document.getElementById('med-adherence-content');
   if (!el) return;
   el.innerHTML = '<div style="padding:20px;text-align:center;color:#888;font-size:12px">Loading…</div>';
 
   const days = 14;
-  const [schedule, confirmations] = await Promise.all([
+  const [schedule, confirmations, alertsList] = await Promise.all([
     fetchMedSchedule(pid),
-    fetchMedConfirmationsRange(pid, days)
+    fetchMedConfirmationsRange(pid, days),
+    fetchMedAlerts(pid)
   ]);
 
+  const alertsHtml = alertsList.length ? alertsList.map(function (a) {
+    const isDeclined = a.alert_type === 'declined';
+    return '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;background:' + (isDeclined ? '#FCEBEB' : '#FFF8E1') + ';border-left:3px solid ' + (isDeclined ? '#E24B4A' : '#EF9F27') + ';padding:10px 12px;border-radius:0 8px 8px 0;margin-bottom:8px">' +
+      '<div style="font-size:12px;color:' + (isDeclined ? '#A32D2D' : '#7A5700') + '">' + (isDeclined ? '🚫 ' : '⚠️ ') + a.message + '</div>' +
+      '<button data-alert-id="' + a.id + '" data-pid="' + pid + '" onclick="dismissMedAlert(this.dataset.alertId, this.dataset.pid)" style="background:none;border:none;color:#888;font-size:11px;cursor:pointer;white-space:nowrap;text-decoration:underline">Dismiss</button>' +
+      '</div>';
+  }).join('') : '';
+
   if (!schedule.length) {
-    el.innerHTML = '<div style="padding:20px;text-align:center;color:#aaa;font-size:12px">No medications scheduled — nothing to measure adherence against yet.</div>';
+    el.innerHTML = alertsHtml + '<div style="padding:20px;text-align:center;color:#aaa;font-size:12px">No medications scheduled — nothing to measure adherence against yet.</div>';
     return;
   }
 
   const stats = computeAdherenceStats(schedule, confirmations, days);
   if (stats.totalExpected === 0) {
-    el.innerHTML = '<div style="padding:20px;text-align:center;color:#aaa;font-size:12px">No doses have come due yet for the scheduled medications.</div>';
+    el.innerHTML = alertsHtml + '<div style="padding:20px;text-align:center;color:#aaa;font-size:12px">No doses have come due yet for the scheduled medications.</div>';
     return;
   }
 
   const pctColor = function (pct) { return pct == null ? '#aaa' : pct >= 80 ? '#1D9E75' : pct >= 50 ? '#EF9F27' : '#E24B4A'; };
 
-  el.innerHTML =
+  el.innerHTML = alertsHtml +
     '<div style="background:#F8FAFD;border:1px solid var(--sv-border);border-radius:10px;padding:16px;margin-bottom:16px;text-align:center">' +
     '<div style="font-size:32px;font-weight:800;color:' + pctColor(stats.overallPct) + '">' + stats.overallPct + '%</div>' +
     '<div style="font-size:12px;color:#888;margin-top:2px">Overall adherence — last ' + days + ' days (' + stats.totalTaken + ' of ' + stats.totalExpected + ' doses confirmed)</div>' +
